@@ -1,38 +1,23 @@
-# Construction Intelligence Platform — Web App Starter
+# Construction Intelligence Platform V1 Clean
 
-Questa è la prima base tecnica della web app aziendale.
+Versione pulita e testabile per Vercel.
 
-## Come provarla in locale
+## Deploy
 
-Serve Node.js installato.
+1. Carica tutti i file nel repository GitHub.
+2. In Vercel assicurati di avere:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+3. Vercel builda con:
+   - `npm run build`
+   - output `dist`
 
-```bash
-npm install
-npm run dev
-```
+## Funzioni V1
 
-Poi apri il link mostrato nel terminale, di solito:
-
-```text
-http://localhost:5173
-```
-
-## Cosa contiene
-
-- Frontend React/Vite
-- UI professionale dark
 - Executive Dashboard
-- Portfolio
+- Portfolio Cards
 - Project Room
-- placeholder COD Room, Issues, Reports
-- mock dati reali Atzori, Friargiu, Loffreda, Bertolin
-- schema Supabase
-- configurazione `.env.example`
-
-## Prossimo step
-
-1. Creare progetto Supabase
-2. Eseguire `supabase/schema.sql`
-3. Collegare `.env`
-4. Sostituire mockData con dati reali Supabase
-5. Aggiungere upload SAL e parser lato server
+- Import SAL placeholder
+- COD placeholder
+- Risk Center placeholder
+- Supabase live data con fallback demo

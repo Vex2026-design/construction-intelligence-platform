@@ -1,43 +1,28 @@
 import { supabase } from "./supabase";
-import { projects as mockProjects, issues as mockIssues, portfolioCurve as mockPortfolioCurve } from "../data/mockData";
+import { mockProjects, mockIssues, mockCurve } from "../data/mockData";
 
-export async function fetchProjects() {
-  if (!supabase) return mockProjects;
-
-  const { data, error } = await supabase
-    .from("projects")
-    .select("*")
-    .order("code", { ascending: true });
-
-  if (error || !data || data.length === 0) {
-    console.warn("Using mock projects:", error);
-    return mockProjects;
-  }
-
-  return data.map((p) => ({
-    code: p.code,
-    name: p.name,
-    technology: p.technology,
-    mwDc: Number(p.mw_dc || 0),
-    mwAc: Number(p.mw_ac || 0),
-    planned: 0,
-    forecast: 0,
-    actual: 0,
-    deltaPlanned: 0,
-    deltaForecast: 0,
-    health: 0,
-    status: "NO DATA",
-    lastSal: ""
-  }));
+function normalizeStatus(status) {
+  return status || "NO DATA";
 }
 
-export async function fetchLatestPortfolio() {
-  if (!supabase) return mockProjects;
+export async function getLatestPortfolio() {
+  if (!supabase) return { projects: mockProjects, source: "demo" };
 
-  const { data: imports, error } = await supabase
+  const { data, error } = await supabase
     .from("sal_imports")
     .select(`
-      *,
+      id,
+      file_name,
+      sheet_name,
+      control_date,
+      planned,
+      forecast,
+      actual,
+      delta_plan,
+      delta_forecast,
+      status,
+      health,
+      imported_at,
       projects:project_id (
         code,
         name,
@@ -48,21 +33,23 @@ export async function fetchLatestPortfolio() {
     `)
     .order("imported_at", { ascending: false });
 
-  if (error || !imports || imports.length === 0) {
-    console.warn("Using mock latest portfolio:", error);
-    return mockProjects;
+  if (error || !data || data.length === 0) {
+    console.warn("Supabase fallback demo:", error);
+    return { projects: mockProjects, source: "demo" };
   }
 
   const seen = new Set();
-  const latest = [];
-  imports.forEach((row) => {
+  const projects = [];
+
+  for (const row of data) {
     const code = row.projects?.code;
-    if (!code || seen.has(code)) return;
+    if (!code || seen.has(code)) continue;
     seen.add(code);
-    latest.push({
+
+    projects.push({
       code,
       name: row.projects?.name || code,
-      technology: row.projects?.technology || "",
+      technology: row.projects?.technology || "PV",
       mwDc: Number(row.projects?.mw_dc || 0),
       mwAc: Number(row.projects?.mw_ac || 0),
       planned: Number(row.planned || 0),
@@ -71,22 +58,27 @@ export async function fetchLatestPortfolio() {
       deltaPlanned: Number(row.delta_plan || 0),
       deltaForecast: Number(row.delta_forecast || 0),
       health: Number(row.health || 0),
-      status: row.status || "NO DATA",
+      status: normalizeStatus(row.status),
       lastSal: row.control_date || "",
       salImportId: row.id
     });
-  });
+  }
 
-  return latest.length ? latest : mockProjects;
+  return { projects: projects.length ? projects : mockProjects, source: projects.length ? "supabase" : "demo" };
 }
 
-export async function fetchIssues() {
+export async function getIssues() {
   if (!supabase) return mockIssues;
 
   const { data, error } = await supabase
     .from("issues")
     .select(`
-      *,
+      id,
+      title,
+      owner,
+      impact_cod,
+      status,
+      mitigation,
       projects:project_id (
         code,
         name
@@ -95,21 +87,21 @@ export async function fetchIssues() {
     .order("created_at", { ascending: false });
 
   if (error || !data || data.length === 0) {
-    console.warn("Using mock issues:", error);
+    console.warn("Issues fallback demo:", error);
     return mockIssues;
   }
 
-  return data.map((i) => ({
-    id: i.id,
-    project: i.projects?.name || i.project_id,
-    title: i.title,
-    owner: i.owner || "",
-    impact: i.impact_cod || "Medium",
-    status: i.status || "Open",
-    action: i.mitigation || ""
+  return data.map((row) => ({
+    id: row.id,
+    project: row.projects?.name || "Project",
+    title: row.title || "",
+    owner: row.owner || "IPP/EPC",
+    impact: row.impact_cod || "Medium",
+    status: row.status || "Open",
+    action: row.mitigation || ""
   }));
 }
 
-export async function fetchPortfolioCurve() {
-  return mockPortfolioCurve;
+export async function getPortfolioCurve() {
+  return mockCurve;
 }
