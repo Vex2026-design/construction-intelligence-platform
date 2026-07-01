@@ -115,3 +115,15 @@ insert into issues(project_code,title,owner,impact,status) values
 ('V0021','Forecast EPC da verificare','IPP','Medium','Open'),
 ('V0012','Necessario recovery plan','EPC','High','Open')
 on conflict do nothing;
+
+
+-- Helios CM 1.0 Patch A: Admin override and governance
+
+alter table weekly_quantity_updates
+add column if not exists admin_override_reason text;
+
+alter table weekly_quantity_updates
+add column if not exists admin_override_at timestamp with time zone;
+
+alter table weekly_quantity_updates
+add column if not exists admin_override_by text;

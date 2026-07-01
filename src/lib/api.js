@@ -75,14 +75,16 @@ export async function reviewUpdates(ids, action, reason="") {
 export async function getApprovedStats(projects) {
   if (!supabase) {
     const approved = demoUpdates().filter(u=>u.status==="Approved");
+    if (!approved.length) return projects.map(p => ({...p, approvedActual:null, hasApprovedData:false, deltaPlanned:null, deltaForecast:null}));
     return projects.map(p => {
       const rows = approved.filter(u=>u.project_code===p.code);
-      const actual = rows.length ? rows.reduce((a,u)=>a+Number(u.progress_pct||0),0)/Math.max(1,rows.length) : p.actual;
-      return {...p, approvedActual: Math.min(1,actual), deltaPlanned: Math.min(1,actual)-p.planned, deltaForecast:Math.min(1,actual)-p.forecast};
+      if (!rows.length) return {...p, approvedActual:null, hasApprovedData:false, deltaPlanned:null, deltaForecast:null};
+      const actual = rows.reduce((a,u)=>a+Number(u.progress_pct||0),0)/Math.max(1,rows.length);
+      return {...p, approvedActual: Math.min(1,actual), hasApprovedData:true, deltaPlanned: Math.min(1,actual)-p.planned, deltaForecast:Math.min(1,actual)-p.forecast};
     });
   }
   const {data,error}=await supabase.from("weekly_quantity_updates").select("*, wbs_activities:wbs_activity_id(*)").eq("status","Approved");
-  if(error || !data?.length) return projects.map(p=>({...p, approvedActual:p.actual, deltaPlanned:p.actual-p.planned, deltaForecast:p.actual-p.forecast}));
+  if(error || !data?.length) return projects.map(p=>({...p, approvedActual:null, hasApprovedData:false, deltaPlanned:null, deltaForecast:null}));
   const latest = {};
   data.forEach(r=>{latest[r.wbs_activity_id]=r});
   const byProject = {};
@@ -94,7 +96,11 @@ export async function getApprovedStats(projects) {
     const progress=total?Number(r.qty_cumulative||0)/total:0;
     byProject[code]+=progress*(Number(a.level1_weight||0)/100)*((a.level2_weight==null?100:Number(a.level2_weight))/100)*(Number(a.activity_weight||0)/100);
   });
-  return projects.map(p=>{const act=byProject[p.code] ?? p.actual; return {...p, approvedActual:act, deltaPlanned:act-p.planned, deltaForecast:act-p.forecast}});
+  return projects.map(p=>{ 
+    if (byProject[p.code] === undefined) return {...p, approvedActual:null, hasApprovedData:false, deltaPlanned:null, deltaForecast:null};
+    const act=byProject[p.code]; 
+    return {...p, approvedActual:act, hasApprovedData:true, deltaPlanned:act-p.planned, deltaForecast:act-p.forecast};
+  });
 }
 
 export async function getTrend() { return mockTrend; }
@@ -104,4 +110,41 @@ export async function getUsers() {
   if(!supabase) return [{id:"1",full_name:"Ugo Ricciardi",email:"ugo@ipp.it",role:"admin",company:"IPP",active:true},{id:"2",full_name:"EPC Demo",email:"epc@demo.it",role:"epc_pm",company:"EPC",active:true}];
   const {data,error}=await supabase.from("user_profiles").select("*").order("created_at",{ascending:false});
   if(error) throw error; return data||[];
+}
+
+
+export async function getAllWeeklyUpdates(projectCode=null) {
+  if (!supabase) return demoUpdates().filter(u => !projectCode || u.project_code===projectCode);
+  let q = supabase.from("weekly_quantity_updates").select("*, wbs_activities:wbs_activity_id(*)").order("week_start",{ascending:false}).order("created_at",{ascending:false});
+  if (projectCode) q = q.eq("project_code", projectCode);
+  const {data,error}=await q; if(error) throw error; return data||[];
+}
+
+export async function adminOverrideWeekly(updateId, patch, reason, adminEmail="admin") {
+  if (!reason) throw new Error("Motivazione obbligatoria per override admin.");
+  if (!supabase) {
+    const before = demoUpdates();
+    const after = before.map(u => u.id===updateId ? {...u, ...patch, admin_override_reason: reason, admin_override_at:new Date().toISOString()} : u);
+    setDemoUpdates(after);
+    return;
+  }
+
+  const { data: oldRows } = await supabase.from("weekly_quantity_updates").select("*").eq("id", updateId).limit(1);
+  const oldValue = oldRows?.[0] || null;
+
+  const { error } = await supabase
+    .from("weekly_quantity_updates")
+    .update({ ...patch, admin_override_reason: reason, admin_override_at: new Date().toISOString() })
+    .eq("id", updateId);
+
+  if (error) throw error;
+
+  await supabase.from("audit_log").insert({
+    email: adminEmail,
+    action: "ADMIN_OVERRIDE_WEEKLY",
+    entity: "weekly_quantity_updates",
+    entity_id: String(updateId),
+    old_value: oldValue,
+    new_value: { ...patch, reason }
+  });
 }
