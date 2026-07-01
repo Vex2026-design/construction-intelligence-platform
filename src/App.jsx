@@ -4,9 +4,12 @@ import {
   AlertTriangle,
   ArrowDownRight,
   Building2,
+  ChevronDown,
+  ChevronRight,
   CalendarDays,
   CheckCircle2,
   ClipboardList,
+  MapPin,
   Factory,
   FileSpreadsheet,
   Gauge,
@@ -232,7 +235,7 @@ function ProjectPage({ project, setPage }) {
       </div>
 
       <div className="project-tabs">
-        <button onClick={() => setPage("wbs")}>WBS</button>
+        <button onClick={() => setPage("wbs")}>WBS Tree</button>
         <button onClick={() => setPage("epc")}>Weekly Input</button>
         <button onClick={() => setPage("curves")}>Curve S</button>
         <button onClick={() => setPage("cod")}>COD</button>
@@ -284,10 +287,107 @@ function ProjectPage({ project, setPage }) {
   );
 }
 
+
+function buildTree(rows) {
+  const tree = {};
+  rows.forEach((r) => {
+    const l1 = r.level1 || "Altro";
+    const l2 = r.level2 || "_direct";
+    tree[l1] = tree[l1] || { weight: r.level1_weight, children: {} };
+    tree[l1].children[l2] = tree[l1].children[l2] || { weight: r.level2_weight, activities: [] };
+    tree[l1].children[l2].activities.push(r);
+  });
+  return tree;
+}
+
+function WbsTreeView({ rows, onSelect }) {
+  const [open, setOpen] = useState({});
+  const tree = buildTree(rows);
+
+  function toggle(key) {
+    setOpen((p) => ({ ...p, [key]: !p[key] }));
+  }
+
+  return (
+    <div className="wbs-tree">
+      {Object.entries(tree).map(([l1, node]) => {
+        const l1Key = `l1-${l1}`;
+        const isOpen = open[l1Key] ?? true;
+        return (
+          <div className="tree-block" key={l1}>
+            <button className="tree-l1" onClick={() => toggle(l1Key)}>
+              {isOpen ? <ChevronDown size={17}/> : <ChevronRight size={17}/>}
+              <span>{l1}</span>
+              <b>{node.weight}%</b>
+            </button>
+
+            {isOpen && Object.entries(node.children).map(([l2, child]) => {
+              const l2Label = l2 === "_direct" ? "Attività dirette" : l2;
+              const l2Key = `${l1}-${l2}`;
+              const isL2Open = open[l2Key] ?? true;
+              return (
+                <div className="tree-l2-wrap" key={l2}>
+                  <button className="tree-l2" onClick={() => toggle(l2Key)}>
+                    {isL2Open ? <ChevronDown size={15}/> : <ChevronRight size={15}/>}
+                    <span>{l2Label}</span>
+                    {child.weight ? <b>{child.weight}%</b> : null}
+                  </button>
+
+                  {isL2Open && child.activities.map((a) => (
+                    <button className="tree-activity" key={a.id} onClick={() => onSelect?.(a)}>
+                      <span>{a.activity}</span>
+                      <small>{a.unit || "-"} · {Number(a.quantity_total || 0).toLocaleString("it-IT")} · peso {a.activity_weight || 0}%</small>
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ActivityDetail({ activity }) {
+  if (!activity) {
+    return (
+      <div className="activity-detail empty-state">
+        Seleziona un’attività dalla WBS Tree.
+      </div>
+    );
+  }
+
+  return (
+    <div className="activity-detail">
+      <div className="activity-head">
+        <div>
+          <span className="eyebrow">WBS Activity</span>
+          <h2>{activity.activity}</h2>
+          <p>{activity.level1}{activity.level2 ? " / " + activity.level2 : ""}</p>
+        </div>
+      </div>
+
+      <div className="activity-kpis">
+        <div><span>Quantità totale</span><b>{Number(activity.quantity_total || 0).toLocaleString("it-IT")} {activity.unit}</b></div>
+        <div><span>Peso attività</span><b>{activity.activity_weight || 0}%</b></div>
+        <div><span>Start planned</span><b>{activity.planned_start || "-"}</b></div>
+        <div><span>Finish planned</span><b>{activity.planned_finish || "-"}</b></div>
+      </div>
+
+      <div className="activity-note">
+        Qui nella V3 successiva vedremo storico settimanale, foto, note EPC, actual/forecast e impatto sul COD.
+      </div>
+    </div>
+  );
+}
+
+
 function WbsSetup({ selectedProject }) {
   const [rows, setRows] = useState([]);
   const [projectCode, setProjectCode] = useState(selectedProject?.code || "V0015");
   const [error, setError] = useState("");
+  const [selectedActivity, setSelectedActivity] = useState(null);
 
   useEffect(() => { if (selectedProject?.code) setProjectCode(selectedProject.code); }, [selectedProject]);
 
@@ -296,6 +396,7 @@ function WbsSetup({ selectedProject }) {
     try {
       const data = await getWbsActivities(projectCode);
       setRows(data);
+      setSelectedActivity(data?.[0] || null);
     } catch (err) {
       setError(err.message || String(err));
     }
@@ -303,51 +404,33 @@ function WbsSetup({ selectedProject }) {
 
   useEffect(() => { load(); }, [projectCode]);
 
-  const grouped = rows.reduce((acc, r) => {
-    const key = `${r.level1}${r.level2 ? " / " + r.level2 : ""}`;
-    acc[key] = acc[key] || [];
-    acc[key].push(r);
-    return acc;
-  }, {});
-
   return (
     <div className="page">
       <div className="page-header">
         <div>
-          <span className="eyebrow">Project WBS</span>
+          <span className="eyebrow">Project WBS Tree</span>
           <h1>WBS Setup</h1>
-          <p>Ogni progetto ha la propria WBS, quantità, date e pesi.</p>
+          <p>Vista ad albero per progetto: L1, L2 e attività operative cliccabili.</p>
         </div>
         <ProjectSelect value={projectCode} onChange={setProjectCode} />
       </div>
 
       {error && <div className="alert error">{error}</div>}
 
-      <div className="panel">
-        <h2>WBS Activities - {projectCode}</h2>
-        <div className="wbs-list">
-          {Object.entries(grouped).map(([group, items]) => (
-            <div className="wbs-group" key={group}>
-              <h3>{group}</h3>
-              <table>
-                <thead><tr><th>Attività</th><th>UM</th><th>Qty</th><th>Peso</th><th>Start</th><th>Finish</th></tr></thead>
-                <tbody>
-                  {items.map((r) => (
-                    <tr key={r.id}>
-                      <td>{r.activity}</td>
-                      <td>{r.unit}</td>
-                      <td>{Number(r.quantity_total || 0).toLocaleString("it-IT")}</td>
-                      <td>{r.activity_weight}%</td>
-                      <td>{r.planned_start || "-"}</td>
-                      <td>{r.planned_finish || "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      <div className="grid two wbs-layout">
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>WBS Tree - {projectCode}</h2>
+              <p>{rows.length} attività caricate</p>
             </div>
-          ))}
-          {!rows.length && <div className="empty-state">Nessuna WBS caricata per {projectCode}.</div>}
-        </div>
+          </div>
+          <WbsTreeView rows={rows} onSelect={setSelectedActivity} />
+        </section>
+
+        <section className="panel">
+          <ActivityDetail activity={selectedActivity} />
+        </section>
       </div>
     </div>
   );

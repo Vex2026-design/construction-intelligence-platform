@@ -526,3 +526,134 @@ th {
   border-color: rgba(85,215,255,.45);
   background: rgba(85,215,255,.08);
 }
+
+
+.wbs-layout {
+  grid-template-columns: 1fr .85fr;
+}
+
+.wbs-tree {
+  display: grid;
+  gap: 12px;
+}
+
+.tree-block {
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255,255,255,.03);
+}
+
+.tree-l1,
+.tree-l2,
+.tree-activity {
+  width: 100%;
+  border: 0;
+  color: #edf5ff;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tree-l1 {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 14px 16px;
+  font-weight: 950;
+  background: rgba(85,215,255,.08);
+}
+
+.tree-l1 b {
+  color: #55d7ff;
+}
+
+.tree-l2-wrap {
+  margin-left: 18px;
+  border-left: 1px solid rgba(85,215,255,.18);
+}
+
+.tree-l2 {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 14px;
+  color: #d9e8fb;
+  font-weight: 850;
+}
+
+.tree-l2 b {
+  color: #ffb020;
+}
+
+.tree-activity {
+  display: block;
+  padding: 11px 14px 11px 38px;
+  border-top: 1px solid rgba(255,255,255,.055);
+}
+
+.tree-activity:hover {
+  background: rgba(255,255,255,.055);
+}
+
+.tree-activity span {
+  display: block;
+  font-weight: 850;
+}
+
+.tree-activity small {
+  display: block;
+  color: #91a8c7;
+  margin-top: 4px;
+}
+
+.activity-detail {
+  min-height: 420px;
+}
+
+.activity-head {
+  margin-bottom: 18px;
+}
+
+.activity-kpis {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.activity-kpis div {
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.035);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.activity-kpis span {
+  display: block;
+  color: #91a8c7;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 6px;
+}
+
+.activity-kpis b {
+  font-size: 18px;
+}
+
+.activity-note {
+  margin-top: 18px;
+  color: #91a8c7;
+  border-top: 1px solid rgba(255,255,255,.08);
+  padding-top: 16px;
+  line-height: 1.6;
+}
+
+@media (max-width: 1180px) {
+  .wbs-layout {
+    grid-template-columns: 1fr;
+  }
+}

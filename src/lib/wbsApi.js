@@ -1,7 +1,8 @@
 import { supabase } from "./supabase";
+import { fallbackWbs } from "../data/fallbackWbs";
 
 export async function getWbsActivities(projectCode = "TEMPLATE") {
-  if (!supabase) return [];
+  if (!supabase) return fallbackWbs.map(r => ({ ...r, project_code: projectCode }));
   const { data, error } = await supabase
     .from("wbs_activities")
     .select("*")
@@ -11,8 +12,8 @@ export async function getWbsActivities(projectCode = "TEMPLATE") {
     .order("level2", { ascending: true })
     .order("activity", { ascending: true });
 
-  if (error) throw error;
-  return data || [];
+  if (error) return fallbackWbs.map(r => ({ ...r, project_code: projectCode }));
+  return (data && data.length) ? data : fallbackWbs.map(r => ({ ...r, project_code: projectCode }));
 }
 
 export async function getWeeklyUpdates(projectCode, weekStart) {
@@ -23,8 +24,8 @@ export async function getWeeklyUpdates(projectCode, weekStart) {
     .eq("project_code", projectCode)
     .eq("week_start", weekStart);
 
-  if (error) throw error;
-  return data || [];
+  if (error) return fallbackWbs.map(r => ({ ...r, project_code: projectCode }));
+  return (data && data.length) ? data : fallbackWbs.map(r => ({ ...r, project_code: projectCode }));
 }
 
 export async function saveWeeklyUpdates(projectCode, weekStart, rows) {
