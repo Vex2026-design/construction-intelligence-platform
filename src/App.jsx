@@ -34,7 +34,7 @@ import {
   RadialBar
 } from "recharts";
 import { getIssues, getLatestPortfolio, getPortfolioCurve } from "./lib/dataApi";
-import { getWbsActivities, saveWeeklyUpdates, calculateProgressFromWbs } from "./lib/wbsApi";
+import { getWbsActivities, saveWeeklyUpdates, calculateProgressFromWbs, createWbsActivity, updateWbsActivity, deactivateWbsActivity } from "./lib/wbsApi";
 
 const pct = (v) => `${((v || 0) * 100).toFixed(1)}%`;
 const signedPct = (v) => `${v >= 0 ? "+" : ""}${((v || 0) * 100).toFixed(1)}%`;
@@ -387,9 +387,31 @@ function WbsSetup({ selectedProject }) {
   const [rows, setRows] = useState([]);
   const [projectCode, setProjectCode] = useState(selectedProject?.code || "V0015");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [selectedActivity, setSelectedActivity] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const emptyForm = {
+    project_code: projectCode,
+    level1: "Construction",
+    level1_weight: 75,
+    level2: "Opere Civili",
+    level2_weight: 10,
+    activity: "",
+    activity_weight: 0,
+    unit: "n°",
+    quantity_total: 0,
+    planned_start: "",
+    planned_finish: ""
+  };
+  const [form, setForm] = useState(emptyForm);
 
-  useEffect(() => { if (selectedProject?.code) setProjectCode(selectedProject.code); }, [selectedProject]);
+  useEffect(() => {
+    if (selectedProject?.code) setProjectCode(selectedProject.code);
+  }, [selectedProject]);
+
+  useEffect(() => {
+    setForm((f) => ({ ...f, project_code: projectCode }));
+  }, [projectCode]);
 
   async function load() {
     setError("");
@@ -404,18 +426,121 @@ function WbsSetup({ selectedProject }) {
 
   useEffect(() => { load(); }, [projectCode]);
 
+  function startAdd() {
+    setForm({ ...emptyForm, project_code: projectCode });
+    setShowForm(true);
+    setSelectedActivity(null);
+  }
+
+  function startEdit(activity) {
+    setForm({
+      id: activity.id,
+      project_code: projectCode,
+      level1: activity.level1 || "",
+      level1_weight: activity.level1_weight || 0,
+      level2: activity.level2 || "",
+      level2_weight: activity.level2_weight || 0,
+      activity: activity.activity || "",
+      activity_weight: activity.activity_weight || 0,
+      unit: activity.unit || "",
+      quantity_total: activity.quantity_total || 0,
+      planned_start: activity.planned_start || "",
+      planned_finish: activity.planned_finish || ""
+    });
+    setShowForm(true);
+    setSelectedActivity(activity);
+  }
+
+  async function saveActivity() {
+    setError("");
+    setSuccess("");
+
+    if (!form.activity.trim()) {
+      setError("Inserisci il nome attività.");
+      return;
+    }
+
+    try {
+      if (form.id && !String(form.id).startsWith("fb-")) {
+        await updateWbsActivity(form);
+        setSuccess("Attività aggiornata.");
+      } else {
+        await createWbsActivity({ ...form, project_code: projectCode });
+        setSuccess("Nuova attività aggiunta alla WBS.");
+      }
+
+      setShowForm(false);
+      await load();
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  }
+
+  async function deactivateSelected() {
+    if (!selectedActivity?.id || String(selectedActivity.id).startsWith("fb-")) {
+      setError("Questa attività è fallback/demo e non può essere disattivata.");
+      return;
+    }
+
+    try {
+      await deactivateWbsActivity(selectedActivity.id);
+      setSuccess("Attività disattivata.");
+      setSelectedActivity(null);
+      await load();
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  }
+
+  function updateForm(field, value) {
+    setForm((f) => ({ ...f, [field]: value }));
+  }
+
   return (
     <div className="page">
       <div className="page-header">
         <div>
           <span className="eyebrow">Project WBS Tree</span>
           <h1>WBS Setup</h1>
-          <p>Vista ad albero per progetto: L1, L2 e attività operative cliccabili.</p>
+          <p>Ogni progetto ha la propria WBS. Da qui puoi aggiungere, modificare o disattivare attività.</p>
         </div>
-        <ProjectSelect value={projectCode} onChange={setProjectCode} />
+        <div className="input-row">
+          <ProjectSelect value={projectCode} onChange={setProjectCode} />
+          <button className="primary-btn" onClick={startAdd}>+ Aggiungi attività</button>
+        </div>
       </div>
 
       {error && <div className="alert error">{error}</div>}
+      {success && <div className="alert success">{success}</div>}
+
+      {showForm && (
+        <section className="panel wbs-editor-form">
+          <div className="panel-head">
+            <div>
+              <h2>{form.id ? "Modifica attività" : "Nuova attività WBS"}</h2>
+              <p>Questa attività sarà disponibile nell’EPC Weekly Input del progetto.</p>
+            </div>
+          </div>
+
+          <div className="form-grid">
+            <label>Livello 1<input value={form.level1} onChange={(e) => updateForm("level1", e.target.value)} /></label>
+            <label>Peso L1 %<input type="number" value={form.level1_weight} onChange={(e) => updateForm("level1_weight", e.target.value)} /></label>
+            <label>Livello 2<input value={form.level2} onChange={(e) => updateForm("level2", e.target.value)} /></label>
+            <label>Peso L2 %<input type="number" value={form.level2_weight} onChange={(e) => updateForm("level2_weight", e.target.value)} /></label>
+            <label>Attività<input value={form.activity} onChange={(e) => updateForm("activity", e.target.value)} /></label>
+            <label>Peso attività %<input type="number" value={form.activity_weight} onChange={(e) => updateForm("activity_weight", e.target.value)} /></label>
+            <label>U.M.<input value={form.unit} onChange={(e) => updateForm("unit", e.target.value)} /></label>
+            <label>Quantità totale<input type="number" value={form.quantity_total} onChange={(e) => updateForm("quantity_total", e.target.value)} /></label>
+            <label>Data inizio planned<input type="date" value={form.planned_start || ""} onChange={(e) => updateForm("planned_start", e.target.value)} /></label>
+            <label>Data fine planned<input type="date" value={form.planned_finish || ""} onChange={(e) => updateForm("planned_finish", e.target.value)} /></label>
+          </div>
+
+          <div className="form-actions">
+            <button className="primary-btn" onClick={saveActivity}>Salva attività</button>
+            <button className="secondary-btn" onClick={() => setShowForm(false)}>Annulla</button>
+          </div>
+        </section>
+      )}
 
       <div className="grid two wbs-layout">
         <section className="panel">
@@ -425,11 +550,17 @@ function WbsSetup({ selectedProject }) {
               <p>{rows.length} attività caricate</p>
             </div>
           </div>
-          <WbsTreeView rows={rows} onSelect={setSelectedActivity} />
+          <WbsTreeView rows={rows} onSelect={(a) => { setSelectedActivity(a); setShowForm(false); }} />
         </section>
 
         <section className="panel">
           <ActivityDetail activity={selectedActivity} />
+          {selectedActivity && (
+            <div className="detail-actions">
+              <button className="primary-btn" onClick={() => startEdit(selectedActivity)}>Modifica attività</button>
+              <button className="secondary-btn danger-outline" onClick={deactivateSelected}>Disattiva attività</button>
+            </div>
+          )}
         </section>
       </div>
     </div>
@@ -500,7 +631,7 @@ function EpcWeeklyInput({ selectedProject }) {
 
       <div className="panel">
         <div className="panel-head">
-          <div><h2>Quantity Update - {projectCode}</h2><p>Inserisci Qty precedente e Qty settimana.</p></div>
+          <div><h2>Quantity Update - {projectCode}</h2><p>Inserisci Qty totale progetto, Qty precedente e Qty settimana. Le quantità totali restano salvate nella WBS del progetto.</p></div>
           <button className="primary-btn" onClick={submit}>Submit EPC Update</button>
         </div>
 
@@ -508,7 +639,7 @@ function EpcWeeklyInput({ selectedProject }) {
           <div className="wbs-group" key={group}>
             <h3>{group}</h3>
             <table>
-              <thead><tr><th>Attività</th><th>UM</th><th>Qty Totale</th><th>Qty Prec.</th><th>Qty Settimana</th><th>Progress</th><th>Note</th></tr></thead>
+              <thead><tr><th>Attività</th><th>UM</th><th>Qty Totale</th><th>Qty Prec.</th><th>Qty Settimana</th><th>Cumulato</th><th>Progress</th><th>Note</th></tr></thead>
               <tbody>
                 {items.map((r) => {
                   const total = Number(r.quantity_total || 0);
@@ -520,9 +651,10 @@ function EpcWeeklyInput({ selectedProject }) {
                     <tr key={r.id}>
                       <td>{r.activity}</td>
                       <td>{r.unit}</td>
-                      <td>{total.toLocaleString("it-IT")}</td>
+                      <td><input className="table-input" type="number" value={r.quantity_total || 0} onChange={(e) => updateRow(r.id, "quantity_total", e.target.value)} /></td>
                       <td><input className="table-input" type="number" value={r.qty_previous} onChange={(e) => updateRow(r.id, "qty_previous", e.target.value)} /></td>
                       <td><input className="table-input" type="number" value={r.qty_week} onChange={(e) => updateRow(r.id, "qty_week", e.target.value)} /></td>
+                      <td>{cum.toLocaleString("it-IT")}</td>
                       <td>{(progress * 100).toFixed(1)}%</td>
                       <td><input className="table-input wide" value={r.notes} onChange={(e) => updateRow(r.id, "notes", e.target.value)} /></td>
                     </tr>

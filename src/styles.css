@@ -657,3 +657,64 @@ th {
     grid-template-columns: 1fr;
   }
 }
+
+
+.wbs-editor-form {
+  margin-bottom: 16px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.form-grid label {
+  display: grid;
+  gap: 6px;
+  color: #91a8c7;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-weight: 900;
+}
+
+.form-grid input {
+  background: #172845;
+  color: #edf5ff;
+  border: 1px solid #2a4366;
+  border-radius: 12px;
+  padding: 11px 12px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.form-actions,
+.detail-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.secondary-btn {
+  border: 1px solid #2a4366;
+  background: rgba(255,255,255,.04);
+  color: #edf5ff;
+  padding: 12px 15px;
+  border-radius: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.danger-outline {
+  border-color: rgba(255,77,79,.45);
+  color: #ffb3b3;
+}
+
+@media (max-width: 900px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
