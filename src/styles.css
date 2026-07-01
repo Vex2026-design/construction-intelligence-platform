@@ -963,3 +963,35 @@ th {
   font-weight: 850;
   cursor: pointer;
 }
+
+
+.admin-form {
+  margin-bottom: 16px;
+}
+
+.project-checkboxes {
+  margin-top: 18px;
+  border-top: 1px solid rgba(255,255,255,.08);
+  padding-top: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.project-checkboxes label {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  color: #edf5ff;
+  font-weight: 800;
+}
+
+.role-pill {
+  display: inline-block;
+  border: 1px solid rgba(85,215,255,.3);
+  background: rgba(85,215,255,.08);
+  color: #55d7ff;
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 900;
+}

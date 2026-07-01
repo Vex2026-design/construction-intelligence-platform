@@ -35,6 +35,7 @@ import {
 } from "recharts";
 import { getIssues, getLatestPortfolio, getPortfolioCurve } from "./lib/dataApi";
 import { getSession, signIn, signOut, roleToPortal, canAccessIpp, canAccessEpc } from "./lib/authApi";
+import { getUsers, getProjectAccess, inviteUserByEmail, deactivateUser } from "./lib/adminApi";
 import { getWbsActivities, saveWeeklyUpdates, calculateProgressFromWbs, createWbsActivity, updateWbsActivity, deactivateWbsActivity, getSubmittedWeeklyUpdates, reviewWeeklyUpdates, getApprovedProgressByProject } from "./lib/wbsApi";
 
 const pct = (v) => `${((v || 0) * 100).toFixed(1)}%`;
@@ -969,6 +970,174 @@ function UserBadge({ profile, onLogout }) {
 }
 
 
+
+function AdminUsers() {
+  const [users, setUsers] = useState([]);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({
+    email: "",
+    full_name: "",
+    company: "",
+    role: "epc_pm",
+    project_codes: ["V0015"]
+  });
+
+  const projectOptions = [
+    ["V0015", "Atzori"],
+    ["V0021", "Friargiu"],
+    ["V0012", "Loffreda"],
+    ["V0057", "Bertolin"]
+  ];
+
+  async function load() {
+    setError("");
+    try {
+      const data = await getUsers();
+      setUsers(data);
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  function update(field, value) {
+    setForm((f) => ({ ...f, [field]: value }));
+  }
+
+  function toggleProject(code) {
+    setForm((f) => {
+      const exists = f.project_codes.includes(code);
+      return {
+        ...f,
+        project_codes: exists
+          ? f.project_codes.filter((c) => c !== code)
+          : [...f.project_codes, code]
+      };
+    });
+  }
+
+  async function createUser() {
+    setError("");
+    setSuccess("");
+
+    if (!form.email || !form.role) {
+      setError("Email e ruolo sono obbligatori.");
+      return;
+    }
+
+    try {
+      await inviteUserByEmail(form);
+      setSuccess("Invito inviato / utente creato. Se Edge Function non è attiva, usa Supabase Auth per completare la creazione.");
+      setShowForm(false);
+      setForm({ email: "", full_name: "", company: "", role: "epc_pm", project_codes: ["V0015"] });
+      await load();
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  }
+
+  async function disable(id) {
+    setError("");
+    setSuccess("");
+    try {
+      await deactivateUser(id);
+      setSuccess("Utente disattivato.");
+      await load();
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  }
+
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <span className="eyebrow">Administration</span>
+          <h1>Users & Access</h1>
+          <p>Crea utenti, assegna ruoli e limita gli EPC ai soli progetti assegnati.</p>
+        </div>
+        <button className="primary-btn" onClick={() => setShowForm(true)}>+ Nuovo utente</button>
+      </div>
+
+      {error && <div className="alert error">{error}</div>}
+      {success && <div className="alert success">{success}</div>}
+
+      {showForm && (
+        <section className="panel admin-form">
+          <h2>Nuovo utente</h2>
+          <div className="form-grid">
+            <label>Email<input value={form.email} onChange={(e) => update("email", e.target.value)} /></label>
+            <label>Nome completo<input value={form.full_name} onChange={(e) => update("full_name", e.target.value)} /></label>
+            <label>Azienda<input value={form.company} onChange={(e) => update("company", e.target.value)} /></label>
+            <label>Ruolo
+              <select value={form.role} onChange={(e) => update("role", e.target.value)}>
+                <option value="admin">Admin</option>
+                <option value="director">Direzione</option>
+                <option value="pm_ipp">PM IPP</option>
+                <option value="viewer">Viewer</option>
+                <option value="epc_pm">EPC PM</option>
+                <option value="site_manager">Site Manager</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="project-checkboxes">
+            <h3>Progetti assegnati</h3>
+            {projectOptions.map(([code, name]) => (
+              <label key={code}>
+                <input type="checkbox" checked={form.project_codes.includes(code)} onChange={() => toggleProject(code)} />
+                {code} · {name}
+              </label>
+            ))}
+          </div>
+
+          <div className="form-actions">
+            <button className="primary-btn" onClick={createUser}>Crea / invita utente</button>
+            <button className="secondary-btn" onClick={() => setShowForm(false)}>Annulla</button>
+          </div>
+
+          <p className="small">
+            Nota: per inviare davvero l'email di invito deve essere deployata la Supabase Edge Function
+            <b> admin-invite-user</b>.
+          </p>
+        </section>
+      )}
+
+      <section className="panel">
+        <h2>Utenti</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Email</th>
+              <th>Azienda</th>
+              <th>Ruolo</th>
+              <th>Stato</th>
+              <th>Azione</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id}>
+                <td>{u.full_name || "-"}</td>
+                <td>{u.email}</td>
+                <td>{u.company || "-"}</td>
+                <td><span className="role-pill">{u.role}</span></td>
+                <td>{u.active ? "Attivo" : "Disattivato"}</td>
+                <td><button className="secondary-btn danger-outline" onClick={() => disable(u.id)}>Disattiva</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  );
+}
+
+
 export default function App() {
   const [auth, setAuth] = useState({ checked: false, user: null, profile: null });
   const [portal, setPortal] = useState(null);
@@ -1031,7 +1200,8 @@ export default function App() {
     ["curves", "S-Curves", Activity],
     ["cod", "COD Center", Gauge],
     ["issues", "Risk Center", AlertTriangle],
-    ["reports", "Reports", FileSpreadsheet]
+    ["reports", "Reports", FileSpreadsheet],
+    ["admin", "Administration", ClipboardList]
   ];
 
   const epcMenu = [
@@ -1085,6 +1255,7 @@ export default function App() {
         {!loading && isIpp && page === "cod" && <Placeholder title="COD Center" subtitle="Readiness, commissioning, documentazione e DSO." icon={Gauge} />}
         {!loading && isIpp && page === "issues" && <Placeholder title="Risk Center" subtitle="Issues, owner, scadenze e impatto COD." icon={AlertTriangle} />}
         {!loading && isIpp && page === "reports" && <Placeholder title="Management Reports" subtitle="Report settimanale per direzione e management." icon={FileSpreadsheet} />}
+        {!loading && isIpp && page === "admin" && <AdminUsers />}
 
         {!loading && isEpc && page === "epc" && <EpcWeeklyInput selectedProject={selectedProject} />}
         {!loading && isEpc && page === "wbs-readonly" && <EpcWbsReadOnly selectedProject={selectedProject} />}

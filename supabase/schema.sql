@@ -142,3 +142,22 @@ add column if not exists submitted_by_user uuid;
 
 alter table weekly_quantity_updates
 add column if not exists reviewed_by_user uuid;
+
+
+-- V1.1 Admin Users
+
+create table if not exists roles_catalog (
+  role text primary key,
+  label text not null,
+  portal text not null,
+  description text
+);
+
+insert into roles_catalog (role, label, portal, description) values
+('admin','Admin','ipp','Accesso completo e amministrazione utenti'),
+('director','Direzione','ipp','Dashboard e report direzionali'),
+('pm_ipp','PM IPP','ipp','Controllo progetti e approvazione weekly'),
+('viewer','Viewer','ipp','Sola lettura'),
+('epc_pm','EPC PM','epc','Compilazione weekly per progetti assegnati'),
+('site_manager','Site Manager','epc','Compilazione limitata di cantiere')
+on conflict (role) do nothing;
