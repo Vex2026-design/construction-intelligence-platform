@@ -1,98 +1,145 @@
-import React,{useEffect,useMemo,useState}from"react";
-import{Activity,AlertTriangle,Building2,CalendarDays,CheckCircle2,ChevronDown,ChevronRight,ClipboardList,Factory,FileSpreadsheet,Gauge,LogOut,Plus,RefreshCw,Shield,UploadCloud,Zap}from"lucide-react";
-import{ResponsiveContainer,BarChart,Bar,XAxis,YAxis,CartesianGrid,Tooltip,Legend,LineChart,Line,RadialBarChart,RadialBar}from"recharts";
-import{getProjects,getWbs,saveWbsActivity,submitWeekly,getSubmitted,reviewUpdates,getApprovedStats,getTrend,getIssues,getUsers,getAllWeeklyUpdates,adminOverrideWeekly}from"./lib/api";
-import{runCalculationEngine,getLatestSnapshots,getAlerts}from"./lib/calculationEngine";
-import{getSession,login,logout,portalForRole}from"./lib/auth";
+import { useEffect, useMemo, useState } from "react";
+import Layout from "./components/Layout";
+import LoginPage from "./pages/LoginPage";
+import PortfolioPage from "./pages/PortfolioPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
+import ProjectPage from "./pages/ProjectPage";
+import WbsPage from "./pages/WbsPage";
+import WeeklyInputPage from "./pages/WeeklyInputPage";
+import WeeklyReviewPage from "./pages/WeeklyReviewPage";
+import CalculationPage from "./pages/CalculationPage";
+import AdminPage from "./pages/AdminPage";
+import AdminOverridePage from "./pages/AdminOverridePage";
+import PlaceholderPage from "./pages/PlaceholderPage";
+import { getIssues, getProjects, getWeeklyUpdates } from "./lib/api";
+import { buildAlerts, buildProjectSnapshots } from "./lib/calculationEngine";
+import { getSession, logout, portalForRole } from "./lib/auth";
 
-const pct=v=>`${((v||0)*100).toFixed(1)}%`;
-const signed=v=>`${v>=0?"+":""}${((v||0)*100).toFixed(1)}%`;
+export default function App() {
+  const [auth, setAuth] = useState({ checked: false, user: null, profile: null });
+  const [portal, setPortal] = useState("ipp");
+  const [page, setPage] = useState("portfolio");
+  const [projects, setProjects] = useState([]);
+  const [approvedUpdates, setApprovedUpdates] = useState([]);
+  const [issues, setIssues] = useState([]);
+  const [selectedProject, setSelectedProject] = useState(null);
 
-function Login({onLogin}){const[email,setEmail]=useState(""),[password,setPassword]=useState(""),[err,setErr]=useState("");async function go(){try{onLogin(await login(email,password))}catch(e){setErr(e.message)}}return <div className="login"><div className="login-card"><span className="eyebrow">Helios CM 1.0</span><h1>Construction Governance Platform</h1><p>Login aziendale con ruoli IPP/EPC.</p><input placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)}/><input placeholder="Password" type="password" value={password} onChange={e=>setPassword(e.target.value)}/>{err&&<div className="alert error">{err}</div>}<button className="primary" onClick={go}>Accedi</button><div className="demo"><button onClick={()=>onLogin({user:{id:"ipp",email:"demo.ipp"},profile:{role:"admin",full_name:"Demo IPP"}})}>Demo IPP</button><button onClick={()=>onLogin({user:{id:"epc",email:"demo.epc"},profile:{role:"epc_pm",full_name:"Demo EPC"}})}>Demo EPC</button></div></div></div>}
+  async function refreshData() {
+    const loadedProjects = await getProjects();
+    const approved = await getWeeklyUpdates(null, ["Approved"]);
+    const loadedIssues = await getIssues();
 
-function EmptyData({message}){return <div className="empty-data"><h3>Dati non disponibili</h3><p>{message}</p></div>}
-function Kpi({label,value,note,tone}){return <div className={`kpi ${tone||""}`}><span>{label}</span><b>{value}</b><small>{note}</small></div>}
-function Status({s}){return <i className={`status ${String(s||"").toLowerCase().replaceAll(" ","-")}`}>{s}</i>}
-function ProjectSelect({value,onChange,projects}){return <select value={value}onChange={e=>onChange(e.target.value)}>{projects.map(p=><option key={p.code}value={p.code}>{p.code} · {p.name}</option>)}</select>}
+    setProjects(loadedProjects);
+    setApprovedUpdates(approved);
+    setIssues(loadedIssues);
 
-function Portfolio({projects,stats,issues,onOpen}){const rows=stats.length?stats:projects.map(p=>({...p,approvedActual:null,hasApprovedData:false,deltaPlanned:null,deltaForecast:null}));const approvedRows=rows.filter(p=>p.hasApprovedData);const approvedRows=rows.filter(p=>p.hasApprovedData);const mw=rows.reduce((a,p)=>a+p.mwDc,0),avg=approvedRows.length?approvedRows.reduce((a,p)=>a+p.approvedActual,0)/approvedRows.length:null,risk=approvedRows.filter(p=>p.deltaPlanned<-0.05).length;return <div className="page"><div className="hero"><div><span className="eyebrow">IPP Control Room</span><h1>Portfolio Executive</h1><p>Dati ufficiali derivati dai Weekly Input approvati.</p></div><button className="primary"><RefreshCw size={16}/>Refresh</button></div><div className="kpis"><Kpi label="MW" value={mw.toFixed(1)} note="portfolio"/><Kpi label="Projects" value={rows.length} note="in construction"/><Kpi label="Approved Actual" value={avg===null?"—":pct(avg)} note={avg===null?"in attesa weekly approved":"progress"}/><Kpi label="At Risk" value={risk} note="delta planned < -5%" tone={risk?"warn":"ok"}/><Kpi label="Governance" value="IPP" note="approved data only"/></div><div className="grid two"><section className="panel"><h2>Planned / Forecast / Approved Actual</h2>{approvedRows.length? <ResponsiveContainer width="100%"height={360}><BarChart data={rows}layout="vertical"margin={{left:20,right:20}}><CartesianGrid stroke="rgba(255,255,255,.1)"horizontal={false}/><XAxis type="number"domain={[0,1]}tickFormatter={v=>`${v*100}%`}stroke="#91a8c7"/><YAxis dataKey="name"type="category"stroke="#91a8c7"width={110}/><Tooltip formatter={v=>pct(v)} contentStyle={{background:"#101c2f",border:"1px solid #2a4366",borderRadius:12}}/><Legend/><Bar dataKey="planned"name="Planned"fill="#55d7ff"radius={[0,8,8,0]}/><Bar dataKey="forecast"name="Forecast"fill="#ffb020"radius={[0,8,8,0]}/><Bar dataKey="approvedActual"name="Approved Actual"fill="#2ecc71"radius={[0,8,8,0]}/></BarChart></ResponsiveContainer> : <EmptyData message="Nessun Weekly approvato: i grafici si attiveranno dopo la prima approvazione IPP." />}</section><section className="panel"><h2>Management Attention</h2>{issues.map(i=><div className="issue"key={i.id}><div><b>{i.project}</b><p>{i.title}</p><small>{i.owner} · {i.status}</small></div><Status s={i.impact}/></div>)}</section></div><section className="panel"><h2>Projects</h2><div className="cards">{rows.map(p=><button className="project"key={p.code}onClick={()=>onOpen(p)}><div><h3>{p.name}</h3><p>{p.code} · {p.mwDc} MW · COD {p.cod}</p></div><Status s={p.deltaPlanned<-0.05?"ATTENTION":"ON TRACK"}/><div className="bars"><span>Approved Actual <b>{pct(p.approvedActual)}</b></span><em><i style={{width:`${p.approvedActual*100}%`}}/></em></div></button>)}</div></section></div>}
-
-function ProjectRoom({project,setPage}){if(!project)return null;const official=project.approvedActual;const hasOfficial=project.hasApprovedData;const cod=hasOfficial?Math.min(95,Math.max(20,official*100+25)):null;return <div className="page"><div className="hero"><div><span className="eyebrow">{project.code}</span><h1>{project.name}</h1><p>{project.technology} · {project.mwDc} MW DC · COD {project.cod}</p></div><Status s={project.deltaPlanned<-0.05?"ATTENTION":"ON TRACK"}/></div><div className="kpis"><Kpi label="Approved Actual" value={hasOfficial?pct(official):"—"} note={hasOfficial?"official":"in attesa weekly approved"}/><Kpi label="Planned" value={pct(project.planned)} note="baseline"/><Kpi label="Forecast" value={pct(project.forecast)} note="EPC"/><Kpi label="Δ Planned" value={hasOfficial?signed(official-project.planned):"—"} note="gap" tone={hasOfficial&&official-project.planned<0?"warn":"ok"}/><Kpi label="COD Readiness" value={cod===null?"—":`${cod.toFixed(0)}%`} note={cod===null?"non calcolabile":"estimate"}/></div><div className="tabs"><button onClick={()=>setPage("wbs")}>WBS</button><button onClick={()=>setPage("weekly")}>EPC Weekly</button><button onClick={()=>setPage("review")}>Weekly Review</button><button onClick={()=>setPage("analytics")}>Analytics</button></div><div className="grid two"><section className="panel"><h2>Discipline Progress</h2>{["Engineering","Procurement","Civil","Mechanical","Electrical","Commissioning"].map((d,i)=>{const v=hasOfficial?Math.max(0,Math.min(1,official+(.35-i*.08))):0;return <div className="bar"key={d}><span>{d}</span><em><i style={{width:`${v*100}%`}}/></em><b>{pct(v)}</b></div>})}</section><section className="panel"><h2>COD Readiness</h2><ResponsiveContainer width="100%"height={260}><RadialBarChart innerRadius="70%"outerRadius="100%"data={[{name:"COD",value:cod,fill:"#2ecc71"}]}startAngle={90}endAngle={-270}><RadialBar dataKey="value"cornerRadius={10}/></RadialBarChart></ResponsiveContainer><div className="cod">{cod===null?"—":`${cod.toFixed(0)}%`}</div></section></div></div>}
-
-function tree(rows){const t={};rows.forEach(r=>{const l1=r.level1,l2=r.level2||"Attività dirette";t[l1]=t[l1]||{w:r.level1_weight,c:{}};t[l1].c[l2]=t[l1].c[l2]||{w:r.level2_weight,a:[]};t[l1].c[l2].a.push(r)});return t}
-function WbsTree({rows,onPick}){const[open,setOpen]=useState({});const t=tree(rows);return <div className="tree">{Object.entries(t).map(([l1,n])=><div className="node"key={l1}><button onClick={()=>setOpen(o=>({...o,[l1]:!(o[l1]??true)}))}>{(open[l1]??true)?<ChevronDown/>:<ChevronRight/>}<b>{l1}</b><span>{n.w}%</span></button>{(open[l1]??true)&&Object.entries(n.c).map(([l2,c])=><div className="child"key={l2}><h4>{l2} {c.w?`· ${c.w}%`:""}</h4>{c.a.map(a=><button className="activity"onClick={()=>onPick(a)}key={a.id}>{a.activity}<small>{a.unit} · {Number(a.quantity_total||0).toLocaleString("it-IT")} · peso {a.activity_weight}%</small></button>)}</div>)}</div>)}</div>}
-
-function Wbs({project,projects}){const[code,setCode]=useState(project?.code||projects[0]?.code),[rows,setRows]=useState([]),[pick,setPick]=useState(null),[form,setForm]=useState(null),[msg,setMsg]=useState("");useEffect(()=>{if(project?.code)setCode(project.code)},[project]);async function load(){const r=await getWbs(code);setRows(r);setPick(r[0])}useEffect(()=>{load()},[code]);function edit(a){setForm(a||{project_code:code,level1:"Construction",level1_weight:75,level2:"Opere Civili",level2_weight:10,activity:"",activity_weight:0,unit:"n°",quantity_total:0,planned_start:"",planned_finish:"",active:true})}async function save(){await saveWbsActivity(form);setMsg("WBS salvata");setForm(null);load()}return <div className="page"><div className="page-head"><div><span className="eyebrow">WBS Engine</span><h1>WBS Setup</h1><p>WBS modificabile per singolo progetto.</p></div><div className="actions"><ProjectSelect value={code}onChange={setCode}projects={projects}/><button className="primary"onClick={()=>edit(null)}><Plus size={16}/>Aggiungi attività</button></div></div>{msg&&<div className="alert success">{msg}</div>}{form&&<section className="panel form"><h2>{form.id?"Modifica":"Nuova"} attività</h2>{["level1","level1_weight","level2","level2_weight","activity","activity_weight","unit","quantity_total","planned_start","planned_finish"].map(k=><label key={k}>{k}<input type={k.includes("date")||k.includes("start")||k.includes("finish")?"date":k.includes("weight")||k.includes("quantity")?"number":"text"}value={form[k]??""}onChange={e=>setForm(f=>({...f,[k]:e.target.value}))}/></label>)}<button className="primary"onClick={save}>Salva</button></section>}<div className="grid two"><section className="panel"><h2>WBS Tree</h2><WbsTree rows={rows}onPick={setPick}/></section><section className="panel"><h2>Activity Detail</h2>{pick&&<div className="detail"><h3>{pick.activity}</h3><p>{pick.level1} / {pick.level2}</p><div className="kpis mini"><Kpi label="Qty" value={`${pick.quantity_total} ${pick.unit}`} note="totale"/><Kpi label="Peso" value={`${pick.activity_weight}%`} note="attività"/><Kpi label="Start" value={pick.planned_start||"-"} note="planned"/><Kpi label="Finish" value={pick.planned_finish||"-"} note="planned"/></div><button className="primary"onClick={()=>edit(pick)}>Modifica attività</button></div>}</section></div></div>}
-
-function WeeklyInput({project,projects}){const[code,setCode]=useState(project?.code||projects[0]?.code),[week,setWeek]=useState(new Date().toISOString().slice(0,10)),[rows,setRows]=useState([]),[msg,setMsg]=useState("");useEffect(()=>{if(project?.code)setCode(project.code)},[project]);async function load(){const r=await getWbs(code);setRows(r.map(x=>({...x,qty_previous:0,qty_week:0,notes:""})))}useEffect(()=>{load()},[code]);async function submit(){await submitWeekly(code,week,rows);setMsg("Weekly Input inviato al PM IPP per approvazione")}function upd(id,k,v){setRows(rs=>rs.map(r=>r.id===id?{...r,[k]:v}:r))}return <div className="page"><div className="page-head"><div><span className="eyebrow">EPC Portal</span><h1>Weekly Input</h1><p>L'EPC compila quantità, note e invia per approvazione IPP.</p></div><div className="actions"><ProjectSelect value={code}onChange={setCode}projects={projects}/><input type="date"value={week}onChange={e=>setWeek(e.target.value)}/><button className="primary"onClick={submit}>Submit</button></div></div>{msg&&<div className="alert success">{msg}</div>}<section className="panel tablewrap"><table><thead><tr><th>Attività</th><th>UM</th><th>Qty Totale</th><th>Prec.</th><th>Settimana</th><th>Cumulato</th><th>%</th><th>Note</th></tr></thead><tbody>{rows.map(r=>{const total=Number(r.quantity_total||0),prev=Number(r.qty_previous||0),w=Number(r.qty_week||0),cum=Math.min(total,prev+w),pr=total?cum/total:0;return <tr key={r.id}><td>{r.activity}</td><td>{r.unit}</td><td><input value={r.quantity_total}type="number"onChange={e=>upd(r.id,"quantity_total",e.target.value)}/></td><td><input value={r.qty_previous}type="number"onChange={e=>upd(r.id,"qty_previous",e.target.value)}/></td><td><input value={r.qty_week}type="number"onChange={e=>upd(r.id,"qty_week",e.target.value)}/></td><td>{cum.toLocaleString("it-IT")}</td><td>{pct(pr)}</td><td><input value={r.notes}onChange={e=>upd(r.id,"notes",e.target.value)}/></td></tr>})}</tbody></table></section></div>}
-
-function Review({project,projects}){const[code,setCode]=useState(project?.code||projects[0]?.code),[rows,setRows]=useState([]),[reason,setReason]=useState(""),[msg,setMsg]=useState("");useEffect(()=>{if(project?.code)setCode(project.code)},[project]);async function load(){setRows(await getSubmitted(code))}useEffect(()=>{load()},[code]);const groups=rows.reduce((a,r)=>{const k=`${r.project_code} · ${r.week_start} · ${r.status}`;(a[k]=a[k]||[]).push(r);return a},{});async function rev(items,action){await reviewUpdates(items.map(i=>i.id),action,reason);if(action==="approve"){await runCalculationEngine(code)}setMsg(action==="approve"?"Approved + Calculation Engine updated":"Rejected");setReason("");load()}return <div className="page"><div className="page-head"><div><span className="eyebrow">IPP Review</span><h1>Weekly Review</h1><p>Solo gli update approvati entrano nelle dashboard IPP.</p></div><ProjectSelect value={code}onChange={setCode}projects={projects}/></div>{msg&&<div className="alert success">{msg}</div>}<section className="panel">{Object.entries(groups).map(([k,items])=><div className="review"key={k}><h3>{k}</h3><table><thead><tr><th>Attività</th><th>Prec.</th><th>Week</th><th>Cumulato</th><th>Note</th></tr></thead><tbody>{items.map(r=><tr key={r.id}><td>{r.activity||r.wbs_activities?.activity}</td><td>{r.qty_previous}</td><td>{r.qty_week}</td><td>{r.qty_cumulative}</td><td>{r.notes}</td></tr>)}</tbody></table><textarea placeholder="Motivazione rifiuto" value={reason}onChange={e=>setReason(e.target.value)}/><button className="primary"onClick={()=>rev(items,"approve")}>Approve</button><button className="secondary danger"onClick={()=>rev(items,"reject")}>Reject</button></div>)}{!rows.length&&<p>Nessun update da approvare.</p>}</section></div>}
-
-function Analytics({projects,stats}){const[trend,setTrend]=useState([]);useEffect(()=>{getTrend().then(setTrend)},[]);const rows=stats.length?stats:projects.map(p=>({...p,approvedActual:null,hasApprovedData:false,deltaPlanned:null,deltaForecast:null}));const approvedRows=rows.filter(p=>p.hasApprovedData);return <div className="page"><div className="page-head"><div><span className="eyebrow">IPP Analytics</span><h1>Control Room</h1><p>Grafici decisionali per governare EPC e COD.</p></div></div><div className="grid two"><section className="panel"><h2>Approved actual by project</h2>{approvedRows.length? {approvedRows.length?<ResponsiveContainer width="100%"height={360}><BarChart data={rows}layout="vertical"><CartesianGrid stroke="rgba(255,255,255,.1)"horizontal={false}/><XAxis type="number"domain={[0,1]}tickFormatter={v=>`${v*100}%`}stroke="#91a8c7"/><YAxis dataKey="name"type="category"stroke="#91a8c7"width={110}/><Tooltip formatter={v=>pct(v)} contentStyle={{background:"#101c2f",border:"1px solid #2a4366",borderRadius:12}}/><Legend/><Bar dataKey="planned"name="Planned"fill="#55d7ff"/><Bar dataKey="forecast"name="Forecast"fill="#ffb020"/><Bar dataKey="approvedActual"name="Approved Actual"fill="#2ecc71"/></BarChart></ResponsiveContainer>:<EmptyData message="Nessun dato approvato: Analytics disattivata fino alla prima approvazione IPP."/>}</section><section className="panel"><h2>Portfolio trend</h2><ResponsiveContainer width="100%"height={360}><LineChart data={trend}><CartesianGrid stroke="rgba(255,255,255,.1)"/><XAxis dataKey="week"stroke="#91a8c7"/><YAxis tickFormatter={v=>`${v}%`}stroke="#91a8c7"/><Tooltip contentStyle={{background:"#101c2f",border:"1px solid #2a4366",borderRadius:12}}/><Legend/><Line dataKey="planned"name="Planned"stroke="#55d7ff"strokeWidth={3}/><Line dataKey="forecast"name="Forecast"stroke="#ffb020"strokeWidth={3}/><Line dataKey="actual"name="Actual"stroke="#2ecc71"strokeWidth={3}/></LineChart></ResponsiveContainer></section></div><section className="panel"><h2>Delta Control</h2><table><thead><tr><th>Progetto</th><th>Approved Actual</th><th>Planned</th><th>Forecast</th><th>Δ Planned</th><th>Δ Forecast</th></tr></thead><tbody>{rows.map(p=><tr key={p.code}><td>{p.code} · {p.name}</td><td>{pct(p.approvedActual)}</td><td>{pct(p.planned)}</td><td>{pct(p.forecast)}</td><td className={p.deltaPlanned<0?"negative":"positive"}>{signed(p.deltaPlanned)}</td><td className={p.deltaForecast<0?"negative":"positive"}>{signed(p.deltaForecast)}</td></tr>)}</tbody></table></section></div>}
-
-
-
-function CalculationCenter({projects}) {
-  const [snapshots,setSnapshots]=useState([]);
-  const [alerts,setAlerts]=useState([]);
-  const [msg,setMsg]=useState("");
-  const [err,setErr]=useState("");
-
-  async function load(){
-    setSnapshots(await getLatestSnapshots());
-    setAlerts(await getAlerts());
+    setSelectedProject((current) => current || loadedProjects[0] || null);
   }
 
-  useEffect(()=>{load()},[]);
+  useEffect(() => {
+    async function boot() {
+      const session = await getSession();
+      setAuth({ checked: true, user: session.user, profile: session.profile });
 
-  async function run(){
-    setErr("");setMsg("");
-    try{
-      const result=await runCalculationEngine();
-      setMsg(`Calculation Engine eseguito: ${result.snapshots.length} snapshot, ${result.alerts.length} alert.`);
-      await load();
-    }catch(e){setErr(e.message||String(e))}
+      if (session.profile) {
+        const userPortal = portalForRole(session.profile.role);
+        setPortal(userPortal);
+        setPage(userPortal === "epc" ? "weekly" : "portfolio");
+      }
+
+      await refreshData();
+    }
+
+    boot();
+  }, []);
+
+  const snapshots = useMemo(
+    () => buildProjectSnapshots(projects, approvedUpdates),
+    [projects, approvedUpdates]
+  );
+
+  const alerts = useMemo(() => buildAlerts(snapshots), [snapshots]);
+
+  const selectedSnapshot = useMemo(() => {
+    if (!selectedProject) return snapshots[0] || null;
+    return snapshots.find((project) => project.code === selectedProject.code) || snapshots[0] || null;
+  }, [selectedProject, snapshots]);
+
+  async function handleLogout() {
+    await logout();
+    setAuth({ checked: true, user: null, profile: null });
   }
 
-  return <div className="page"><div className="page-head"><div><span className="eyebrow">Calculation Engine</span><h1>Analytics Engine</h1><p>Genera snapshot, KPI e alert dai Weekly approvati.</p></div><button className="primary"onClick={run}>Run Calculation Engine</button></div>{err&&<div className="alert error">{err}</div>}{msg&&<div className="alert success">{msg}</div>}<div className="grid two"><section className="panel"><h2>Latest Snapshots</h2><table><thead><tr><th>Project</th><th>Week</th><th>Actual</th><th>Planned</th><th>SPI</th><th>Health</th><th>Status</th></tr></thead><tbody>{snapshots.map(s=><tr key={`${s.project_code}-${s.week_start}`}><td>{s.project_code}</td><td>{s.week_start}</td><td>{pct(s.actual)}</td><td>{pct(s.planned)}</td><td>{s.spi?Number(s.spi).toFixed(2):"—"}</td><td>{s.health}</td><td>{s.status}</td></tr>)}</tbody></table>{!snapshots.length&&<EmptyData message="Nessuno snapshot: approva un Weekly e lancia il Calculation Engine."/>}</section><section className="panel"><h2>Alerts</h2>{alerts.map(a=><div className="issue"key={a.id||a.title}><div><b>{a.project_code}</b><p>{a.title}</p><small>{a.message}</small></div><Status s={a.severity}/></div>)}{!alerts.length&&<EmptyData message="Nessun alert aperto."/>}</section></div></div>
+  if (!auth.checked) return null;
+
+  if (!auth.user) {
+    return (
+      <LoginPage
+        onLogin={(result) => {
+          const userPortal = portalForRole(result.profile.role);
+          setAuth({ checked: true, ...result });
+          setPortal(userPortal);
+          setPage(userPortal === "epc" ? "weekly" : "portfolio");
+        }}
+      />
+    );
+  }
+
+  return (
+    <Layout
+      portal={portal}
+      profile={auth.profile}
+      page={page}
+      setPage={setPage}
+      onLogout={handleLogout}
+      onSwitchPortal={() => {
+        const nextPortal = portal === "epc" ? "ipp" : "epc";
+        setPortal(nextPortal);
+        setPage(nextPortal === "epc" ? "weekly" : "portfolio");
+      }}
+    >
+      {page === "portfolio" && (
+        <PortfolioPage
+          snapshots={snapshots}
+          issues={[...issues, ...alerts]}
+          onOpenProject={(project) => {
+            setSelectedProject(project);
+            setPage("project");
+          }}
+        />
+      )}
+
+      {page === "analytics" && <AnalyticsPage snapshots={snapshots} />}
+
+      {page === "project" && <ProjectPage project={selectedSnapshot} setPage={setPage} />}
+
+      {page === "wbs" && (
+        <WbsPage selectedProject={selectedSnapshot} projects={projects} />
+      )}
+
+      {page === "weekly" && (
+        <WeeklyInputPage selectedProject={selectedSnapshot} projects={projects} />
+      )}
+
+      {page === "review" && (
+        <WeeklyReviewPage
+          selectedProject={selectedSnapshot}
+          projects={projects}
+          refreshData={refreshData}
+        />
+      )}
+
+      {page === "calculation" && (
+        <CalculationPage snapshots={snapshots} alerts={alerts} refreshData={refreshData} />
+      )}
+
+      {page === "admin" && <AdminPage />}
+
+      {page === "override" && <AdminOverridePage projects={projects} />}
+
+      {page === "cod" && <PlaceholderPage title="COD Center" />}
+
+      {page === "issues" && <PlaceholderPage title="Risk Center" />}
+    </Layout>
+  );
 }
-
-
-function AdminConsole({projects}) {
-  const [code,setCode]=useState(projects[0]?.code||"V0015");
-  const [rows,setRows]=useState([]);
-  const [reason,setReason]=useState("");
-  const [msg,setMsg]=useState("");
-  const [err,setErr]=useState("");
-
-  async function load(){setRows(await getAllWeeklyUpdates(code))}
-  useEffect(()=>{if(projects.length)load()},[code,projects.length]);
-
-  function upd(id,k,v){setRows(rs=>rs.map(r=>r.id===id?{...r,[k]:v}:r))}
-
-  async function save(r){
-    setErr("");setMsg("");
-    try{
-      await adminOverrideWeekly(r.id,{
-        qty_previous:Number(r.qty_previous||0),
-        qty_week:Number(r.qty_week||0),
-        qty_cumulative:Number(r.qty_cumulative||0),
-        progress_pct:Number(r.progress_pct||0),
-        notes:r.notes||"",
-        status:r.status
-      }, reason, "Admin");
-      setMsg("Override salvato con audit log.");
-      setReason("");
-      await load();
-    }catch(e){setErr(e.message||String(e))}
-  }
-
-  return <div className="page"><div className="page-head"><div><span className="eyebrow">Admin Console</span><h1>Weekly Override</h1><p>Correzione amministrativa post-approvazione con motivazione obbligatoria e audit log.</p></div><ProjectSelect value={code}onChange={setCode}projects={projects}/></div>{err&&<div className="alert error">{err}</div>}{msg&&<div className="alert success">{msg}</div>}<section className="panel"><label className="override-reason">Motivazione override<textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Es. errore materiale di inserimento EPC"/></label><table><thead><tr><th>Week</th><th>Attività</th><th>Status</th><th>Prec.</th><th>Week</th><th>Cumulato</th><th>Progress</th><th>Note</th><th></th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td>{r.week_start}</td><td>{r.activity||r.wbs_activities?.activity}</td><td><select value={r.status}onChange={e=>upd(r.id,"status",e.target.value)}><option>Submitted</option><option>Approved</option><option>Rejected</option></select></td><td><input type="number"value={r.qty_previous}onChange={e=>upd(r.id,"qty_previous",e.target.value)}/></td><td><input type="number"value={r.qty_week}onChange={e=>upd(r.id,"qty_week",e.target.value)}/></td><td><input type="number"value={r.qty_cumulative}onChange={e=>upd(r.id,"qty_cumulative",e.target.value)}/></td><td><input type="number"value={r.progress_pct}step="0.01"onChange={e=>upd(r.id,"progress_pct",e.target.value)}/></td><td><input value={r.notes||""}onChange={e=>upd(r.id,"notes",e.target.value)}/></td><td><button className="primary"onClick={()=>save(r)}>Override</button></td></tr>)}</tbody></table>{!rows.length&&<EmptyData message="Nessun weekly update presente per questo progetto."/>}</section></div>
-}
-
-
-function Admin(){const[users,setUsers]=useState([]);useEffect(()=>{getUsers().then(setUsers)},[]);return <div className="page"><div className="page-head"><div><span className="eyebrow">Administration</span><h1>Users & Access</h1><p>Ruoli, aziende e accessi progetto.</p></div><button className="primary"><Plus size={16}/>Nuovo utente</button></div><section className="panel"><table><thead><tr><th>Nome</th><th>Email</th><th>Azienda</th><th>Ruolo</th><th>Stato</th></tr></thead><tbody>{users.map(u=><tr key={u.id}><td>{u.full_name}</td><td>{u.email}</td><td>{u.company}</td><td>{u.role}</td><td>{u.active?"Attivo":"Disattivo"}</td></tr>)}</tbody></table></section></div>}
-
-function Placeholder({title}){return <div className="page"><section className="panel empty"><h1>{title}</h1><p>Modulo previsto nella roadmap 1.x.</p></section></div>}
-
-export default function App(){const[auth,setAuth]=useState({checked:false,user:null,profile:null}),[portal,setPortal]=useState("ipp"),[page,setPage]=useState("portfolio"),[projects,setProjects]=useState([]),[stats,setStats]=useState([]),[issues,setIssues]=useState([]),[selected,setSelected]=useState(null);useEffect(()=>{getSession().then(s=>{setAuth({checked:true,...s});if(s.profile){setPortal(portalForRole(s.profile.role));setPage(portalForRole(s.profile.role)==="epc"?"weekly":"portfolio")}})},[]);async function load(){const p=await getProjects();setProjects(p);setSelected(s=>s||p[0]);setStats(await getApprovedStats(p));setIssues(await getIssues())}useEffect(()=>{load()},[]);if(!auth.checked)return <Login onLogin={()=>{}}/>;if(!auth.user)return <Login onLogin={r=>{setAuth({checked:true,...r});setPortal(portalForRole(r.profile.role));setPage(portalForRole(r.profile.role)==="epc"?"weekly":"portfolio")}}/>;const isEpc=portal==="epc";const menu=isEpc?[["weekly","Weekly Input",UploadCloud],["wbs","WBS View",ClipboardList]]:[["portfolio","Portfolio",Building2],["analytics","IPP Analytics",Activity],["calc","Calculation Engine",Gauge],["project","Project",Zap],["wbs","WBS Setup",ClipboardList],["weekly","EPC Weekly",UploadCloud],["review","Weekly Review",CheckCircle2],["cod","COD Center",Gauge],["issues","Risk Center",AlertTriangle],["admin","Administration",Shield],["admin-console","Admin Console",Shield]];async function out(){await logout();setAuth({checked:true,user:null,profile:null})}function open(p){setSelected(p);setPage("project")}return <div className={`app ${isEpc?"epc":""}`}><aside><div className="brand">Helios CM<span>{isEpc?"EPC Portal":"IPP Control Center"}</span></div><div className="user"><b>{auth.profile.full_name||auth.profile.email}</b><span>{auth.profile.role}</span><button onClick={out}><LogOut size={14}/>Logout</button></div>{auth.profile.role==="admin"&&<button className="switch"onClick={()=>{setPortal(isEpc?"ipp":"epc");setPage(isEpc?"portfolio":"weekly")}}>Switch {isEpc?"IPP":"EPC"}</button>}<nav>{menu.map(([id,l,Icon])=><button key={id}className={page===id?"active":""}onClick={()=>setPage(id)}><Icon size={18}/>{l}</button>)}</nav></aside><main>{page==="portfolio"&&<Portfolio projects={projects}stats={stats}issues={issues}onOpen={open}/>} {page==="analytics"&&<Analytics projects={projects}stats={stats}/>} {page==="calc"&&<CalculationCenter projects={projects}/>} {page==="project"&&<ProjectRoom project={selected}setPage={setPage}/>} {page==="wbs"&&<Wbs project={selected}projects={projects}/>} {page==="weekly"&&<WeeklyInput project={selected}projects={projects}/>} {page==="review"&&<Review project={selected}projects={projects}/>} {page==="admin"&&<Admin/>} {page==="admin-console"&&<AdminConsole projects={projects}/>}  {page==="cod"&&<Placeholder title="COD Center"/>} {page==="issues"&&<Placeholder title="Risk Center"/>}</main></div>}

@@ -1,6 +1,10 @@
-# Helios CM Architecture
+# Helios CM Enterprise Architecture
 
-EPC Weekly Input -> IPP Approval -> Calculation Engine -> Snapshots / Alerts -> IPP Dashboards.
+## Data governance rule
+Dashboards and analytics use only IPP-approved Weekly data.
 
-Dashboards must never use unapproved EPC data.
-Admin can override approved data only with reason and audit log.
+## Flow
+EPC Weekly Input -> IPP Review -> Approved data -> Calculation Engine -> Portfolio / Project / Analytics.
+
+## Admin
+Admin can override data after approval, but every override requires a reason and writes an audit log.

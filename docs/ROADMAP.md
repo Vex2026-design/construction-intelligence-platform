@@ -1,27 +1,28 @@
-# Helios CM Roadmap
+# Roadmap
 
-## 1.0 Foundation
-- Login / roles / admin governance
-- Projects
-- WBS Engine
+## 1.0 Enterprise Foundation
+- Login / roles
+- IPP and EPC portals
+- WBS editor
 - EPC Weekly Input
-- IPP Review
+- IPP Weekly Review
 - Calculation Engine
+- Admin Override
 - IPP Analytics
 
 ## 1.1 Construction Governance
-- Issues
-- Punch List
-- Site Diary
-- Photo Progress
+- Issue management
+- Punch list
+- Site diary
+- Photos
 
-## 1.2 Commissioning & COD
+## 1.2 COD Center
 - Mechanical Completion
-- Cold/Hot Commissioning
-- COD Center
-- Enel/DSO checklist
+- Commissioning
+- Enel / DSO checklist
+- Handover
 
-## 2.0 AI Copilot
+## 2.0 AI Construction Copilot
 - Executive summary
-- Risk narrative
 - COD forecast explanation
+- Risk narratives
