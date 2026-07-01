@@ -34,7 +34,7 @@ import {
   RadialBar
 } from "recharts";
 import { getIssues, getLatestPortfolio, getPortfolioCurve } from "./lib/dataApi";
-import { getWbsActivities, saveWeeklyUpdates, calculateProgressFromWbs, createWbsActivity, updateWbsActivity, deactivateWbsActivity } from "./lib/wbsApi";
+import { getWbsActivities, saveWeeklyUpdates, calculateProgressFromWbs, createWbsActivity, updateWbsActivity, deactivateWbsActivity, getSubmittedWeeklyUpdates, reviewWeeklyUpdates, getApprovedProgressByProject } from "./lib/wbsApi";
 
 const pct = (v) => `${((v || 0) * 100).toFixed(1)}%`;
 const signedPct = (v) => `${v >= 0 ? "+" : ""}${((v || 0) * 100).toFixed(1)}%`;
@@ -599,7 +599,7 @@ function EpcWeeklyInput({ selectedProject }) {
     try {
       await saveWeeklyUpdates(projectCode, weekStart, rows);
       const progress = calculateProgressFromWbs(rows);
-      setSuccess(`Aggiornamento EPC salvato. Progress WBS stimato: ${(progress * 100).toFixed(2)}%`);
+      setSuccess(`Aggiornamento EPC inviato per approvazione IPP. Progress WBS proposto: ${(progress * 100).toFixed(2)}%`);
     } catch (err) {
       setError(err.message || String(err));
     }
@@ -718,7 +718,184 @@ function Placeholder({ title, subtitle, icon: Icon }) {
   );
 }
 
+
+
+function WeeklyReview({ selectedProject }) {
+  const [projectCode, setProjectCode] = useState(selectedProject?.code || "V0015");
+  const [rows, setRows] = useState([]);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    if (selectedProject?.code) setProjectCode(selectedProject.code);
+  }, [selectedProject]);
+
+  async function load() {
+    setError("");
+    setSuccess("");
+    try {
+      const data = await getSubmittedWeeklyUpdates(projectCode);
+      setRows(data);
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  }
+
+  useEffect(() => { load(); }, [projectCode]);
+
+  const grouped = rows.reduce((acc, r) => {
+    const key = `${r.project_code} | Week ${r.week_start} | ${r.status}`;
+    acc[key] = acc[key] || [];
+    acc[key].push(r);
+    return acc;
+  }, {});
+
+  async function reviewGroup(items, action) {
+    setError("");
+    setSuccess("");
+    if (action === "reject" && !reason.trim()) {
+      setError("Inserisci una motivazione per il rifiuto.");
+      return;
+    }
+    try {
+      await reviewWeeklyUpdates(items.map((i) => i.id), action, "IPP PM", reason);
+      setSuccess(action === "approve" ? "Aggiornamento approvato." : "Aggiornamento rifiutato.");
+      setReason("");
+      await load();
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  }
+
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <span className="eyebrow">IPP Approval Workflow</span>
+          <h1>Weekly Review</h1>
+          <p>Gli avanzamenti EPC aggiornano Portfolio e Project solo dopo approvazione IPP.</p>
+        </div>
+        <ProjectSelect value={projectCode} onChange={setProjectCode} />
+      </div>
+
+      {error && <div className="alert error">{error}</div>}
+      {success && <div className="alert success">{success}</div>}
+
+      <div className="panel">
+        <h2>Submitted / Rejected Updates</h2>
+        <p className="small">Storico per settimana e progetto. Approva solo i dati corretti.</p>
+
+        <div className="review-list">
+          {Object.entries(grouped).map(([key, items]) => (
+            <div className="review-card" key={key}>
+              <div className="review-head">
+                <h3>{key}</h3>
+                <span className={`status status-${String(items[0].status).toLowerCase()}`}>{items[0].status}</span>
+              </div>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th>Attività</th>
+                    <th>Disciplina</th>
+                    <th>Qty Prec.</th>
+                    <th>Qty Week</th>
+                    <th>Cumulato</th>
+                    <th>Progress</th>
+                    <th>Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((r) => {
+                    const total = Number(r.wbs_activities?.quantity_total || 0);
+                    const progress = total > 0 ? Number(r.qty_cumulative || 0) / total : 0;
+                    return (
+                      <tr key={r.id}>
+                        <td>{r.wbs_activities?.activity}</td>
+                        <td>{r.wbs_activities?.level2 || r.wbs_activities?.level1}</td>
+                        <td>{Number(r.qty_previous || 0).toLocaleString("it-IT")}</td>
+                        <td>{Number(r.qty_week || 0).toLocaleString("it-IT")}</td>
+                        <td>{Number(r.qty_cumulative || 0).toLocaleString("it-IT")}</td>
+                        <td>{(progress * 100).toFixed(1)}%</td>
+                        <td>{r.notes || "-"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              <textarea
+                className="review-reason"
+                placeholder="Motivazione rifiuto, se necessaria..."
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+
+              <div className="form-actions">
+                <button className="primary-btn" onClick={() => reviewGroup(items, "approve")}>Approve</button>
+                <button className="secondary-btn danger-outline" onClick={() => reviewGroup(items, "reject")}>Reject</button>
+              </div>
+            </div>
+          ))}
+          {!rows.length && <div className="empty-state">Nessun update da revisionare per {projectCode}.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function EpcWbsReadOnly({ selectedProject }) {
+  const [rows, setRows] = useState([]);
+  const [projectCode, setProjectCode] = useState(selectedProject?.code || "V0015");
+  const [selectedActivity, setSelectedActivity] = useState(null);
+
+  useEffect(() => {
+    if (selectedProject?.code) setProjectCode(selectedProject.code);
+  }, [selectedProject]);
+
+  async function load() {
+    const data = await getWbsActivities(projectCode);
+    setRows(data);
+    setSelectedActivity(data?.[0] || null);
+  }
+
+  useEffect(() => { load(); }, [projectCode]);
+
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <span className="eyebrow">EPC Restricted View</span>
+          <h1>WBS Operativa</h1>
+          <p>Vista sola lettura della WBS del progetto. La modifica struttura è riservata al portale IPP.</p>
+        </div>
+        <ProjectSelect value={projectCode} onChange={setProjectCode} />
+      </div>
+
+      <div className="grid two wbs-layout">
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>WBS Tree - {projectCode}</h2>
+              <p>{rows.length} attività operative</p>
+            </div>
+          </div>
+          <WbsTreeView rows={rows} onSelect={setSelectedActivity} />
+        </section>
+
+        <section className="panel">
+          <ActivityDetail activity={selectedActivity} />
+        </section>
+      </div>
+    </div>
+  );
+}
+
+
 export default function App() {
+  const [portal, setPortal] = useState(null);
   const [page, setPage] = useState("portfolio");
   const { projects, issues, curve, source, loading, reload } = useData();
   const [selectedProject, setSelectedProject] = useState(null);
@@ -732,21 +909,72 @@ export default function App() {
     setPage("project");
   }
 
-  const menu = [
+  function enterPortal(nextPortal) {
+    setPortal(nextPortal);
+    setPage(nextPortal === "epc" ? "epc" : "portfolio");
+  }
+
+  if (!portal) {
+    return (
+      <div className="portal-gateway">
+        <div className="gateway-card">
+          <span className="eyebrow">Construction Intelligence Platform</span>
+          <h1>Scegli il portale</h1>
+          <p>
+            Due ambienti separati: EPC compila solo gli avanzamenti settimanali, IPP controlla portfolio,
+            WBS, rischi, COD e reporting.
+          </p>
+
+          <div className="portal-choice-grid">
+            <button className="portal-choice" onClick={() => enterPortal("ipp")}>
+              <Building2 size={34} />
+              <h2>Portale IPP</h2>
+              <p>Dashboard, Portfolio, Project Room, WBS Setup, COD, Risk Center e Reports.</p>
+            </button>
+
+            <button className="portal-choice epc-choice" onClick={() => enterPortal("epc")}>
+              <Factory size={34} />
+              <h2>Portale EPC</h2>
+              <p>Accesso operativo limitato: progetto, settimana, quantità WBS, note e submit.</p>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const ippMenu = [
     ["portfolio", "Portfolio", Building2],
     ["project", "Project", Zap],
     ["wbs", "WBS Setup", ClipboardList],
-    ["epc", "EPC Weekly Input", UploadCloud],
+    ["weekly-review", "Weekly Review", CheckCircle2],
+    ["weekly-review", "Weekly Review", CheckCircle2],
+    ["epc", "EPC Input Review", UploadCloud],
     ["curves", "S-Curves", Activity],
     ["cod", "COD Center", Gauge],
     ["issues", "Risk Center", AlertTriangle],
     ["reports", "Reports", FileSpreadsheet]
   ];
 
+  const epcMenu = [
+    ["epc", "Weekly Input", UploadCloud],
+    ["wbs-readonly", "WBS View", ClipboardList]
+  ];
+
+  const menu = portal === "ipp" ? ippMenu : epcMenu;
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${portal === "epc" ? "epc-portal" : "ipp-portal"}`}>
       <aside>
-        <div className="brand">Construction<br />Intelligence<br />Platform<span>Project-first V2</span></div>
+        <div className="brand">
+          {portal === "ipp" ? "IPP Control Center" : "EPC Weekly Portal"}
+          <span>{portal === "ipp" ? "Owner / Committente" : "Restricted operational access"}</span>
+        </div>
+
+        <div className="portal-switch">
+          <button onClick={() => setPortal(null)}>Cambia portale</button>
+        </div>
+
         <nav>
           {menu.map(([id, label, Icon]) => (
             <button key={id} className={page === id ? "active" : ""} onClick={() => setPage(id)}>
@@ -754,19 +982,28 @@ export default function App() {
             </button>
           ))}
         </nav>
-        <div className="side-footer"><CheckCircle2 size={14} />Supabase ready</div>
+
+        <div className="side-footer">
+          <CheckCircle2 size={14} />
+          {portal === "ipp" ? "IPP full access" : "EPC limited access"}
+        </div>
       </aside>
 
       <main>
         {loading && <Placeholder title="Caricamento dati..." subtitle="Connessione a Supabase in corso." icon={Activity} />}
-        {!loading && page === "portfolio" && <PortfolioHome projects={projects} issues={issues} source={source} onReload={reload} onOpenProject={openProject} />}
-        {!loading && page === "project" && <ProjectPage project={selectedProject} setPage={setPage} />}
-        {!loading && page === "wbs" && <WbsSetup selectedProject={selectedProject} />}
-        {!loading && page === "epc" && <EpcWeeklyInput selectedProject={selectedProject} />}
-        {!loading && page === "curves" && <CurvesPage curve={curve} />}
-        {!loading && page === "cod" && <Placeholder title="COD Center" subtitle="Readiness, commissioning, documentazione e DSO." icon={Gauge} />}
-        {!loading && page === "issues" && <Placeholder title="Risk Center" subtitle="Issues, owner, scadenze e impatto COD." icon={AlertTriangle} />}
-        {!loading && page === "reports" && <Placeholder title="Management Reports" subtitle="Report settimanale per direzione e management." icon={FileSpreadsheet} />}
+
+        {!loading && portal === "ipp" && page === "portfolio" && <PortfolioHome projects={projects} issues={issues} source={source} onReload={reload} onOpenProject={openProject} />}
+        {!loading && portal === "ipp" && page === "project" && <ProjectPage project={selectedProject} setPage={setPage} />}
+        {!loading && portal === "ipp" && page === "wbs" && <WbsSetup selectedProject={selectedProject} />}
+        {!loading && portal === "ipp" && page === "weekly-review" && <WeeklyReview selectedProject={selectedProject} />}
+        {!loading && portal === "ipp" && page === "epc" && <EpcWeeklyInput selectedProject={selectedProject} />}
+        {!loading && portal === "ipp" && page === "curves" && <CurvesPage curve={curve} />}
+        {!loading && portal === "ipp" && page === "cod" && <Placeholder title="COD Center" subtitle="Readiness, commissioning, documentazione e DSO." icon={Gauge} />}
+        {!loading && portal === "ipp" && page === "issues" && <Placeholder title="Risk Center" subtitle="Issues, owner, scadenze e impatto COD." icon={AlertTriangle} />}
+        {!loading && portal === "ipp" && page === "reports" && <Placeholder title="Management Reports" subtitle="Report settimanale per direzione e management." icon={FileSpreadsheet} />}
+
+        {!loading && portal === "epc" && page === "epc" && <EpcWeeklyInput selectedProject={selectedProject} />}
+        {!loading && portal === "epc" && page === "wbs-readonly" && <EpcWbsReadOnly selectedProject={selectedProject} />}
       </main>
     </div>
   );

@@ -83,3 +83,22 @@ create table if not exists weekly_quantity_updates (
   reviewed_at timestamp with time zone,
   created_at timestamp with time zone default now()
 );
+
+
+-- V3.4 Approval Workflow
+
+alter table weekly_quantity_updates
+add column if not exists week_end date;
+
+alter table weekly_quantity_updates
+add column if not exists rejection_reason text;
+
+create table if not exists weekly_review_log (
+  id uuid primary key default gen_random_uuid(),
+  update_id uuid references weekly_quantity_updates(id) on delete cascade,
+  project_code text not null,
+  action text not null,
+  reviewer text,
+  reason text,
+  created_at timestamp with time zone default now()
+);

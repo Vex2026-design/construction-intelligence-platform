@@ -162,3 +162,109 @@ export async function deactivateWbsActivity(id) {
 
   if (error) throw error;
 }
+
+
+export async function getSubmittedWeeklyUpdates(projectCode = null) {
+  if (!supabase) return [];
+
+  let query = supabase
+    .from("weekly_quantity_updates")
+    .select(`
+      *,
+      wbs_activities:wbs_activity_id (
+        activity,
+        level1,
+        level2,
+        unit,
+        quantity_total,
+        activity_weight,
+        level1_weight,
+        level2_weight
+      )
+    `)
+    .in("status", ["Submitted", "Rejected"])
+    .order("week_start", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (projectCode) query = query.eq("project_code", projectCode);
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+export async function reviewWeeklyUpdates(updateIds, action, reviewer = "IPP PM", reason = "") {
+  if (!supabase) throw new Error("Supabase non configurato.");
+
+  const status = action === "approve" ? "Approved" : "Rejected";
+  const patch = action === "approve"
+    ? { status, reviewed_by: reviewer, reviewed_at: new Date().toISOString(), rejection_reason: null }
+    : { status, reviewed_by: reviewer, reviewed_at: new Date().toISOString(), rejection_reason: reason };
+
+  const { error } = await supabase
+    .from("weekly_quantity_updates")
+    .update(patch)
+    .in("id", updateIds);
+
+  if (error) throw error;
+
+  // best effort log
+  for (const id of updateIds) {
+    await supabase.from("weekly_review_log").insert({
+      update_id: id,
+      project_code: "MULTI",
+      action: status,
+      reviewer,
+      reason
+    });
+  }
+}
+
+export async function getApprovedProgressByProject() {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("weekly_quantity_updates")
+    .select(`
+      *,
+      wbs_activities:wbs_activity_id (
+        project_code,
+        level1,
+        level1_weight,
+        level2,
+        level2_weight,
+        activity,
+        activity_weight,
+        quantity_total
+      )
+    `)
+    .eq("status", "Approved")
+    .order("week_start", { ascending: true });
+
+  if (error) return [];
+
+  const latestByActivity = {};
+  for (const row of data || []) {
+    latestByActivity[row.wbs_activity_id] = row;
+  }
+
+  const byProject = {};
+  Object.values(latestByActivity).forEach((row) => {
+    const a = row.wbs_activities;
+    if (!a) return;
+    const code = row.project_code || a.project_code;
+    byProject[code] = byProject[code] || { project_code: code, progress: 0, activities: [] };
+
+    const qtyTotal = Number(a.quantity_total || 0);
+    const progress = qtyTotal > 0 ? Number(row.qty_cumulative || 0) / qtyTotal : 0;
+    const w1 = Number(a.level1_weight || 0) / 100;
+    const w2 = a.level2_weight === null || a.level2_weight === undefined ? 1 : Number(a.level2_weight || 0) / 100;
+    const w3 = Number(a.activity_weight || 0) / 100;
+    const weighted = progress * w1 * w2 * w3;
+
+    byProject[code].progress += weighted;
+    byProject[code].activities.push({ ...row, weighted_progress: weighted });
+  });
+
+  return Object.values(byProject);
+}
