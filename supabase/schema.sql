@@ -45,3 +45,26 @@ create table if not exists issues (
   created_at timestamp with time zone default now(),
   closed_at timestamp with time zone
 );
+
+
+create table if not exists phase_progress (
+  id uuid primary key default gen_random_uuid(),
+  sal_import_id uuid references sal_imports(id) on delete cascade,
+  project_id uuid references projects(id) on delete cascade,
+  phase text,
+  planned numeric,
+  forecast numeric,
+  actual numeric,
+  delta_plan numeric,
+  delta_forecast numeric
+);
+
+create table if not exists s_curve_points (
+  id uuid primary key default gen_random_uuid(),
+  sal_import_id uuid references sal_imports(id) on delete cascade,
+  project_id uuid references projects(id) on delete cascade,
+  point_date date,
+  planned numeric,
+  forecast numeric,
+  actual numeric
+);

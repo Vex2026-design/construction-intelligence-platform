@@ -30,6 +30,7 @@ import {
   RadialBar
 } from "recharts";
 import { getIssues, getLatestPortfolio, getPortfolioCurve } from "./lib/dataApi";
+import { parseWeeklyReport, saveWeeklyReport } from "./lib/weeklyImport";
 
 const pct = (v) => `${((v || 0) * 100).toFixed(1)}%`;
 const signedPct = (v) => `${v >= 0 ? "+" : ""}${((v || 0) * 100).toFixed(1)}%`;
@@ -350,22 +351,102 @@ function ProjectRoom({ project }) {
   );
 }
 
-function ImportSal() {
+function ImportSal({ onImported }) {
+  const [parsed, setParsed] = useState(null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState("");
+
+  async function handleFile(event) {
+    setError("");
+    setSuccess("");
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const result = await parseWeeklyReport(file);
+      setParsed(result);
+    } catch (err) {
+      setError(err.message || String(err));
+      setParsed(null);
+    }
+  }
+
+  async function handleSave() {
+    if (!parsed) return;
+    setSaving(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const result = await saveWeeklyReport(parsed);
+      setSuccess(`Import completato: ${result.project.name} - SAL ${parsed.controlDate}`);
+      setParsed(null);
+      await onImported?.();
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="page">
       <div className="page-header">
         <div>
-          <span className="eyebrow">Import</span>
-          <h1>Import SAL EPC</h1>
-          <p>Prossimo modulo: upload del SAL e parsing automatico nel database.</p>
+          <span className="eyebrow">Import reale</span>
+          <h1>Import Weekly Report EPC</h1>
+          <p>Carica il file Excel dell'EPC: l'app legge Overall, fasi e Curve S e salva tutto in Supabase.</p>
         </div>
       </div>
+
       <div className="panel upload-panel">
         <FileSpreadsheet size={46} />
-        <h2>Trascina qui il SAL Excel</h2>
-        <p>Il sistema riconoscerà progetto, percentuali, curve S e fasi WBS.</p>
-        <button className="primary-btn">Seleziona file</button>
+        <h2>Carica Weekly Report / SAL Excel</h2>
+        <p>Formato atteso: foglio Report/Foglio1 con Overall e foglio “Curve S”.</p>
+        <label className="file-btn">
+          Seleziona file Excel
+          <input type="file" accept=".xlsx,.xlsm,.xls" onChange={handleFile} />
+        </label>
       </div>
+
+      {error && <div className="alert error">{error}</div>}
+      {success && <div className="alert success">{success}</div>}
+
+      {parsed && (
+        <div className="grid two">
+          <section className="panel">
+            <h2>Anteprima import</h2>
+            <div className="preview-grid">
+              <div><span>File</span><b>{parsed.fileName}</b></div>
+              <div><span>Progetto</span><b>{parsed.projectCode || "Non riconosciuto"}</b></div>
+              <div><span>Sheet</span><b>{parsed.reportSheetName}</b></div>
+              <div><span>Data SAL</span><b>{parsed.controlDate}</b></div>
+              <div><span>Planned</span><b>{pct(parsed.overall.planned)}</b></div>
+              <div><span>Forecast</span><b>{pct(parsed.overall.forecast)}</b></div>
+              <div><span>Actual</span><b>{pct(parsed.overall.actual)}</b></div>
+              <div><span>Δ Planned</span><b className={parsed.overall.deltaPlan < 0 ? "negative" : "positive"}>{signedPct(parsed.overall.deltaPlan)}</b></div>
+              <div><span>Δ Forecast</span><b className={parsed.overall.deltaForecast < 0 ? "negative" : "positive"}>{signedPct(parsed.overall.deltaForecast)}</b></div>
+              <div><span>Fasi lette</span><b>{parsed.phases.length}</b></div>
+              <div><span>Punti Curve S</span><b>{parsed.curve.length}</b></div>
+              <div><span>Status</span><b>{parsed.status}</b></div>
+            </div>
+
+            <button className="primary-btn save-btn" onClick={handleSave} disabled={saving}>
+              {saving ? "Salvataggio..." : "Salva in Supabase"}
+            </button>
+          </section>
+
+          <section className="panel">
+            <h2>Fasi lette dal file</h2>
+            <div className="phase-preview">
+              {parsed.phases.slice(0, 10).map((p) => (
+                <MiniBar key={p.phase} label={p.phase} value={p.actual} type="actual" />
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -439,7 +520,7 @@ export default function App() {
         {!loading && page === "executive" && <Executive projects={projects} issues={issues} curve={curve} source={source} onReload={reload} onOpenProject={openProject} />}
         {!loading && page === "portfolio" && <Portfolio projects={projects} onOpenProject={openProject} />}
         {!loading && page === "project" && <ProjectRoom project={selectedProject} />}
-        {!loading && page === "import" && <ImportSal />}
+        {!loading && page === "import" && <ImportSal onImported={reload} />}
         {!loading && page === "cod" && <Placeholder title="COD Center" subtitle="Readiness, documenti, commissioning, Enel/DSO e handover." icon={Gauge} />}
         {!loading && page === "issues" && <Placeholder title="Risk Center" subtitle="Issues, decision log, owner, scadenze e impatto COD." icon={AlertTriangle} />}
         {!loading && page === "reports" && <Placeholder title="Management Reports" subtitle="Report settimanale per direzione e management." icon={FileSpreadsheet} />}

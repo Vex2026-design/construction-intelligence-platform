@@ -413,3 +413,82 @@ textarea {
   .side-footer { position: relative; left: auto; right: auto; bottom: auto; margin-top: 24px; }
   .kpi-grid, .kpi-grid.five, .grid.two, .project-grid.large { grid-template-columns: 1fr; }
 }
+
+
+.file-btn {
+  display: inline-block;
+  border: 1px solid #2a4366;
+  background: linear-gradient(90deg, rgba(91,140,255,.35), rgba(85,215,255,.13));
+  color: #edf5ff;
+  padding: 12px 15px;
+  border-radius: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  margin-top: 18px;
+}
+
+.file-btn input {
+  display: none;
+}
+
+.alert {
+  margin-top: 16px;
+  border-radius: 16px;
+  padding: 14px 16px;
+  font-weight: 800;
+}
+
+.alert.error {
+  color: #ffb3b3;
+  background: rgba(255,77,79,.16);
+  border: 1px solid rgba(255,77,79,.45);
+}
+
+.alert.success {
+  color: #b9ffd3;
+  background: rgba(46,204,113,.16);
+  border: 1px solid rgba(46,204,113,.45);
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.preview-grid div {
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.035);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.preview-grid span {
+  display: block;
+  color: #91a8c7;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 6px;
+}
+
+.preview-grid b {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.save-btn {
+  margin-top: 18px;
+}
+
+.save-btn:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+.phase-preview {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
