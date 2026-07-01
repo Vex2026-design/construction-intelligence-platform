@@ -161,3 +161,30 @@ insert into roles_catalog (role, label, portal, description) values
 ('epc_pm','EPC PM','epc','Compilazione weekly per progetti assegnati'),
 ('site_manager','Site Manager','epc','Compilazione limitata di cantiere')
 on conflict (role) do nothing;
+
+
+-- V1.2 IPP Analytics / robust weekly engine
+
+alter table weekly_quantity_updates
+add column if not exists week_end date;
+
+alter table weekly_quantity_updates
+add column if not exists rejection_reason text;
+
+alter table weekly_quantity_updates
+add column if not exists forecast_finish date;
+
+alter table weekly_quantity_updates
+add column if not exists ipp_comment text;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'weekly_quantity_updates_unique_week_activity'
+  ) then
+    alter table weekly_quantity_updates
+    add constraint weekly_quantity_updates_unique_week_activity
+    unique (project_code, wbs_activity_id, week_start);
+  end if;
+end $$;

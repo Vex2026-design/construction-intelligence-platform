@@ -36,7 +36,7 @@ import {
 import { getIssues, getLatestPortfolio, getPortfolioCurve } from "./lib/dataApi";
 import { getSession, signIn, signOut, roleToPortal, canAccessIpp, canAccessEpc } from "./lib/authApi";
 import { getUsers, getProjectAccess, inviteUserByEmail, deactivateUser } from "./lib/adminApi";
-import { getWbsActivities, saveWeeklyUpdates, calculateProgressFromWbs, createWbsActivity, updateWbsActivity, deactivateWbsActivity, getSubmittedWeeklyUpdates, reviewWeeklyUpdates, getApprovedProgressByProject } from "./lib/wbsApi";
+import { getWbsActivities, saveWeeklyUpdates, calculateProgressFromWbs, createWbsActivity, updateWbsActivity, deactivateWbsActivity, getSubmittedWeeklyUpdates, reviewWeeklyUpdates, getApprovedProgressByProject, getApprovedProjectStats, getApprovedWeeklyTrend } from "./lib/wbsApi";
 
 const pct = (v) => `${((v || 0) * 100).toFixed(1)}%`;
 const signedPct = (v) => `${v >= 0 ? "+" : ""}${((v || 0) * 100).toFixed(1)}%`;
@@ -971,6 +971,137 @@ function UserBadge({ profile, onLogout }) {
 
 
 
+
+function IppAnalytics({ projects }) {
+  const [stats, setStats] = useState([]);
+  const [trend, setTrend] = useState([]);
+  const [selectedCode, setSelectedCode] = useState("ALL");
+  const [error, setError] = useState("");
+
+  async function load() {
+    setError("");
+    try {
+      const [projectStats, weeklyTrend] = await Promise.all([
+        getApprovedProjectStats(),
+        getApprovedWeeklyTrend(selectedCode === "ALL" ? null : selectedCode)
+      ]);
+      setStats(projectStats);
+      setTrend(weeklyTrend);
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  }
+
+  useEffect(() => { load(); }, [selectedCode]);
+
+  const projectRows = projects.map((p) => {
+    const s = stats.find((x) => x.project_code === p.code);
+    const actual = s?.actual ?? p.actual ?? 0;
+    return {
+      ...p,
+      approvedActual: actual,
+      deltaPlannedApproved: actual - (p.planned || 0),
+      deltaForecastApproved: actual - (p.forecast || 0)
+    };
+  });
+
+  const avgApproved = projectRows.reduce((a, p) => a + (p.approvedActual || 0), 0) / Math.max(1, projectRows.length);
+  const atRisk = projectRows.filter((p) => p.deltaPlannedApproved < -0.05).length;
+
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <span className="eyebrow">IPP Analytics</span>
+          <h1>Control Room</h1>
+          <p>Grafici e KPI derivati dagli aggiornamenti settimanali approvati dal PM IPP.</p>
+        </div>
+        <div className="input-row">
+          <select value={selectedCode} onChange={(e) => setSelectedCode(e.target.value)}>
+            <option value="ALL">Portfolio</option>
+            {projects.map((p) => <option key={p.code} value={p.code}>{p.code} · {p.name}</option>)}
+          </select>
+          <button className="primary-btn" onClick={load}>Aggiorna analytics</button>
+        </div>
+      </div>
+
+      {error && <div className="alert error">{error}</div>}
+
+      <div className="kpi-grid five">
+        <KpiCard icon={Activity} label="Actual approvato" value={pct(avgApproved)} note="da weekly approved" />
+        <KpiCard icon={AlertTriangle} label="Progetti sotto piano" value={atRisk} note="delta planned < -5%" tone={atRisk > 0 ? "warning" : "success"} />
+        <KpiCard icon={CheckCircle2} label="Fonte dati" value="Approved" note="solo dati validati IPP" />
+        <KpiCard icon={Gauge} label="Controllo" value="IPP" note="nessun dato sporco in dashboard" />
+        <KpiCard icon={CalendarDays} label="Storico" value={trend.length} note="settimane approvate" />
+      </div>
+
+      <div className="grid two">
+        <section className="panel">
+          <h2>Approved Actual vs Baseline</h2>
+          <ResponsiveContainer width="100%" height={380}>
+            <BarChart data={projectRows} layout="vertical" margin={{ left: 20, right: 20 }}>
+              <CartesianGrid stroke="rgba(255,255,255,.10)" horizontal={false} />
+              <XAxis type="number" domain={[0, 1]} tickFormatter={(v) => `${v * 100}%`} stroke="#91a8c7" />
+              <YAxis dataKey="name" type="category" stroke="#91a8c7" width={105} />
+              <Tooltip formatter={(v) => pct(v)} contentStyle={{ background: "#101c2f", border: "1px solid #2a4366", borderRadius: 12 }} />
+              <Legend />
+              <Bar dataKey="planned" name="Planned" fill="#55d7ff" radius={[0, 8, 8, 0]} />
+              <Bar dataKey="forecast" name="Forecast" fill="#ffb020" radius={[0, 8, 8, 0]} />
+              <Bar dataKey="approvedActual" name="Approved Actual" fill="#2ecc71" radius={[0, 8, 8, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </section>
+
+        <section className="panel">
+          <h2>Approved Weekly Trend</h2>
+          <ResponsiveContainer width="100%" height={380}>
+            <LineChart data={trend}>
+              <CartesianGrid stroke="rgba(255,255,255,.10)" />
+              <XAxis dataKey="week" stroke="#91a8c7" />
+              <YAxis domain={[0, 1]} tickFormatter={(v) => `${v * 100}%`} stroke="#91a8c7" />
+              <Tooltip formatter={(v) => pct(v)} contentStyle={{ background: "#101c2f", border: "1px solid #2a4366", borderRadius: 12 }} />
+              <Legend />
+              <Line type="monotone" dataKey="actual" name="Approved Actual" stroke="#2ecc71" strokeWidth={3} dot={{ r: 4 }} />
+            </LineChart>
+          </ResponsiveContainer>
+          {!trend.length && <p className="small">Il trend comparirà quando saranno presenti weekly update approvati.</p>}
+        </section>
+      </div>
+
+      <section className="panel">
+        <h2>Delta Control</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Progetto</th>
+              <th>Approved Actual</th>
+              <th>Planned</th>
+              <th>Forecast</th>
+              <th>Δ Planned</th>
+              <th>Δ Forecast</th>
+              <th>Stato IPP</th>
+            </tr>
+          </thead>
+          <tbody>
+            {projectRows.map((p) => (
+              <tr key={p.code}>
+                <td><b>{p.code}</b> · {p.name}</td>
+                <td>{pct(p.approvedActual)}</td>
+                <td>{pct(p.planned)}</td>
+                <td>{pct(p.forecast)}</td>
+                <td className={p.deltaPlannedApproved < 0 ? "negative" : "positive"}>{signedPct(p.deltaPlannedApproved)}</td>
+                <td className={p.deltaForecastApproved < 0 ? "negative" : "positive"}>{signedPct(p.deltaForecastApproved)}</td>
+                <td>{p.deltaPlannedApproved < -0.05 ? "ATTENTION" : "OK"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  );
+}
+
+
 function AdminUsers() {
   const [users, setUsers] = useState([]);
   const [error, setError] = useState("");
@@ -1193,6 +1324,7 @@ export default function App() {
 
   const ippMenu = [
     ["portfolio", "Portfolio", Building2],
+    ["analytics", "IPP Analytics", Activity],
     ["project", "Project", Zap],
     ["wbs", "WBS Setup", ClipboardList],
     ["weekly-review", "Weekly Review", CheckCircle2],
@@ -1247,6 +1379,7 @@ export default function App() {
         {loading && <Placeholder title="Caricamento dati..." subtitle="Connessione a Supabase in corso." icon={Activity} />}
 
         {!loading && isIpp && page === "portfolio" && <PortfolioHome projects={projects} issues={issues} source={source} onReload={reload} onOpenProject={openProject} />}
+        {!loading && isIpp && page === "analytics" && <IppAnalytics projects={projects} />}
         {!loading && isIpp && page === "project" && <ProjectPage project={selectedProject} setPage={setPage} />}
         {!loading && isIpp && page === "wbs" && <WbsSetup selectedProject={selectedProject} />}
         {!loading && isIpp && page === "weekly-review" && <WeeklyReview selectedProject={selectedProject} />}

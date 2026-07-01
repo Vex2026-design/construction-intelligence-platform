@@ -268,3 +268,119 @@ export async function getApprovedProgressByProject() {
 
   return Object.values(byProject);
 }
+
+
+export async function getApprovedProjectStats() {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("weekly_quantity_updates")
+    .select(`
+      *,
+      wbs_activities:wbs_activity_id (
+        project_code,
+        level1,
+        level1_weight,
+        level2,
+        level2_weight,
+        activity,
+        activity_weight,
+        unit,
+        quantity_total,
+        planned_start,
+        planned_finish
+      )
+    `)
+    .eq("status", "Approved")
+    .order("week_start", { ascending: true });
+
+  if (error) {
+    console.warn("approved stats error", error);
+    return [];
+  }
+
+  const latestByActivity = {};
+  for (const row of data || []) {
+    latestByActivity[row.wbs_activity_id] = row;
+  }
+
+  const projects = {};
+  Object.values(latestByActivity).forEach((row) => {
+    const a = row.wbs_activities;
+    if (!a) return;
+    const code = row.project_code || a.project_code;
+    projects[code] = projects[code] || {
+      project_code: code,
+      actual: 0,
+      activities: [],
+      byDiscipline: {}
+    };
+
+    const qtyTotal = Number(a.quantity_total || 0);
+    const progress = qtyTotal > 0 ? Number(row.qty_cumulative || 0) / qtyTotal : 0;
+    const w1 = Number(a.level1_weight || 0) / 100;
+    const w2 = a.level2_weight === null || a.level2_weight === undefined ? 1 : Number(a.level2_weight || 0) / 100;
+    const w3 = Number(a.activity_weight || 0) / 100;
+    const weighted = progress * w1 * w2 * w3;
+
+    projects[code].actual += weighted;
+    projects[code].activities.push({ ...row, progress, weighted_progress: weighted });
+
+    const discipline = a.level2 || a.level1;
+    projects[code].byDiscipline[discipline] = projects[code].byDiscipline[discipline] || { progress: 0, weight: 0 };
+    projects[code].byDiscipline[discipline].progress += weighted;
+    projects[code].byDiscipline[discipline].weight += w1 * w2 * w3;
+  });
+
+  return Object.values(projects).map((p) => ({
+    ...p,
+    actual: Math.max(0, Math.min(1, p.actual)),
+    byDiscipline: Object.fromEntries(Object.entries(p.byDiscipline).map(([k, v]) => [
+      k,
+      v.weight > 0 ? v.progress / v.weight : 0
+    ]))
+  }));
+}
+
+export async function getApprovedWeeklyTrend(projectCode = null) {
+  if (!supabase) return [];
+
+  let query = supabase
+    .from("weekly_quantity_updates")
+    .select(`
+      *,
+      wbs_activities:wbs_activity_id (
+        project_code,
+        level1_weight,
+        level2_weight,
+        activity_weight,
+        quantity_total
+      )
+    `)
+    .eq("status", "Approved")
+    .order("week_start", { ascending: true });
+
+  if (projectCode) query = query.eq("project_code", projectCode);
+
+  const { data, error } = await query;
+  if (error) return [];
+
+  const byWeek = {};
+  for (const row of data || []) {
+    const week = row.week_start;
+    const a = row.wbs_activities;
+    if (!a) continue;
+    const qtyTotal = Number(a.quantity_total || 0);
+    const progress = qtyTotal > 0 ? Number(row.qty_cumulative || 0) / qtyTotal : 0;
+    const w1 = Number(a.level1_weight || 0) / 100;
+    const w2 = a.level2_weight === null || a.level2_weight === undefined ? 1 : Number(a.level2_weight || 0) / 100;
+    const w3 = Number(a.activity_weight || 0) / 100;
+    byWeek[week] = byWeek[week] || 0;
+    byWeek[week] += progress * w1 * w2 * w3;
+  }
+
+  return Object.entries(byWeek).map(([week, actual]) => ({
+    week,
+    actual: Math.max(0, Math.min(1, actual))
+  }));
+}
