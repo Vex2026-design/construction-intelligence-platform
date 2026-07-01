@@ -855,3 +855,111 @@ th {
   background: rgba(255,77,79,.16);
   border: 1px solid rgba(255,77,79,.45);
 }
+
+
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: radial-gradient(circle at top left, #102847, #07101d 45%, #050a12);
+  color: #edf5ff;
+}
+
+.login-card {
+  width: min(560px, 100%);
+  border: 1px solid #2a4366;
+  border-radius: 32px;
+  padding: 34px;
+  background:
+    radial-gradient(circle at top right, rgba(85,215,255,.18), transparent 35%),
+    linear-gradient(180deg, rgba(23,40,69,.96), rgba(15,29,49,.96));
+  box-shadow: 0 24px 80px rgba(0,0,0,.32);
+}
+
+.login-card h1 {
+  font-size: 38px;
+}
+
+.login-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 24px;
+}
+
+.login-form label {
+  display: grid;
+  gap: 7px;
+  color: #91a8c7;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-weight: 900;
+}
+
+.login-form input {
+  background: #172845;
+  color: #edf5ff;
+  border: 1px solid #2a4366;
+  border-radius: 14px;
+  padding: 13px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.login-btn {
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.demo-login {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  border-top: 1px solid rgba(255,255,255,.08);
+  padding-top: 18px;
+}
+
+.demo-login p {
+  width: 100%;
+  margin: 0;
+  font-size: 12px;
+}
+
+.user-badge {
+  margin-top: 18px;
+  border: 1px solid #2a4366;
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(255,255,255,.035);
+  display: grid;
+  gap: 10px;
+}
+
+.user-badge strong {
+  display: block;
+  color: #edf5ff;
+  font-size: 13px;
+}
+
+.user-badge span {
+  display: block;
+  color: #91a8c7;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-top: 3px;
+}
+
+.user-badge button {
+  border: 1px solid #2a4366;
+  background: rgba(255,255,255,.04);
+  color: #91a8c7;
+  padding: 9px 10px;
+  border-radius: 10px;
+  font-weight: 850;
+  cursor: pointer;
+}

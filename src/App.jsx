@@ -34,6 +34,7 @@ import {
   RadialBar
 } from "recharts";
 import { getIssues, getLatestPortfolio, getPortfolioCurve } from "./lib/dataApi";
+import { getSession, signIn, signOut, roleToPortal, canAccessIpp, canAccessEpc } from "./lib/authApi";
 import { getWbsActivities, saveWeeklyUpdates, calculateProgressFromWbs, createWbsActivity, updateWbsActivity, deactivateWbsActivity, getSubmittedWeeklyUpdates, reviewWeeklyUpdates, getApprovedProgressByProject } from "./lib/wbsApi";
 
 const pct = (v) => `${((v || 0) * 100).toFixed(1)}%`;
@@ -894,60 +895,137 @@ function EpcWbsReadOnly({ selectedProject }) {
 }
 
 
+
+function LoginScreen({ onLogin }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [mode, setMode] = useState("login");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit() {
+    setError("");
+    setLoading(true);
+    try {
+      const result = await signIn(email, password);
+      onLogin(result);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function demoIpp() {
+    onLogin({
+      user: { id: "demo-ipp", email: "demo.ipp@company.com" },
+      profile: { id: "demo-ipp", email: "demo.ipp@company.com", full_name: "Demo IPP PM", role: "admin" }
+    });
+  }
+
+  function demoEpc() {
+    onLogin({
+      user: { id: "demo-epc", email: "demo.epc@epc.com" },
+      profile: { id: "demo-epc", email: "demo.epc@epc.com", full_name: "Demo EPC PM", role: "epc_pm" }
+    });
+  }
+
+  return (
+    <div className="login-shell">
+      <div className="login-card">
+        <span className="eyebrow">Helios CM</span>
+        <h1>Construction Management System</h1>
+        <p>Accesso sicuro con ruoli separati IPP / EPC.</p>
+
+        <div className="login-form">
+          <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@azienda.com" /></label>
+          <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" /></label>
+          {error && <div className="alert error">{error}</div>}
+          <button className="primary-btn login-btn" onClick={submit} disabled={loading}>
+            {loading ? "Accesso..." : "Accedi"}
+          </button>
+        </div>
+
+        <div className="demo-login">
+          <p>Per test immediato:</p>
+          <button className="secondary-btn" onClick={demoIpp}>Entra Demo IPP</button>
+          <button className="secondary-btn" onClick={demoEpc}>Entra Demo EPC</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UserBadge({ profile, onLogout }) {
+  return (
+    <div className="user-badge">
+      <div>
+        <strong>{profile?.full_name || profile?.email}</strong>
+        <span>{profile?.role}</span>
+      </div>
+      <button onClick={onLogout}>Logout</button>
+    </div>
+  );
+}
+
+
 export default function App() {
+  const [auth, setAuth] = useState({ checked: false, user: null, profile: null });
   const [portal, setPortal] = useState(null);
   const [page, setPage] = useState("portfolio");
   const { projects, issues, curve, source, loading, reload } = useData();
   const [selectedProject, setSelectedProject] = useState(null);
 
   useEffect(() => {
+    async function boot() {
+      const session = await getSession();
+      const nextPortal = session.profile ? roleToPortal(session.profile.role) : null;
+      setAuth({ checked: true, user: session.user, profile: session.profile });
+      setPortal(nextPortal);
+      setPage(nextPortal === "epc" ? "epc" : "portfolio");
+    }
+    boot();
+  }, []);
+
+  useEffect(() => {
     if (!selectedProject && projects.length) setSelectedProject(projects[0]);
   }, [projects, selectedProject]);
+
+  function handleLogin(result) {
+    const nextPortal = roleToPortal(result.profile.role);
+    setAuth({ checked: true, user: result.user, profile: result.profile });
+    setPortal(nextPortal);
+    setPage(nextPortal === "epc" ? "epc" : "portfolio");
+  }
+
+  async function handleLogout() {
+    await signOut();
+    setAuth({ checked: true, user: null, profile: null });
+    setPortal(null);
+    setPage("portfolio");
+  }
 
   function openProject(project) {
     setSelectedProject(project);
     setPage("project");
   }
 
-  function enterPortal(nextPortal) {
-    setPortal(nextPortal);
-    setPage(nextPortal === "epc" ? "epc" : "portfolio");
+  if (!auth.checked) {
+    return <div className="login-shell"><div className="login-card"><h1>Caricamento...</h1></div></div>;
   }
 
-  if (!portal) {
-    return (
-      <div className="portal-gateway">
-        <div className="gateway-card">
-          <span className="eyebrow">Construction Intelligence Platform</span>
-          <h1>Scegli il portale</h1>
-          <p>
-            Due ambienti separati: EPC compila solo gli avanzamenti settimanali, IPP controlla portfolio,
-            WBS, rischi, COD e reporting.
-          </p>
-
-          <div className="portal-choice-grid">
-            <button className="portal-choice" onClick={() => enterPortal("ipp")}>
-              <Building2 size={34} />
-              <h2>Portale IPP</h2>
-              <p>Dashboard, Portfolio, Project Room, WBS Setup, COD, Risk Center e Reports.</p>
-            </button>
-
-            <button className="portal-choice epc-choice" onClick={() => enterPortal("epc")}>
-              <Factory size={34} />
-              <h2>Portale EPC</h2>
-              <p>Accesso operativo limitato: progetto, settimana, quantità WBS, note e submit.</p>
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+  if (!auth.user || !auth.profile) {
+    return <LoginScreen onLogin={handleLogin} />;
   }
+
+  const role = auth.profile.role;
+  const isIpp = portal === "ipp";
+  const isEpc = portal === "epc";
 
   const ippMenu = [
     ["portfolio", "Portfolio", Building2],
     ["project", "Project", Zap],
     ["wbs", "WBS Setup", ClipboardList],
-    ["weekly-review", "Weekly Review", CheckCircle2],
     ["weekly-review", "Weekly Review", CheckCircle2],
     ["epc", "EPC Input Review", UploadCloud],
     ["curves", "S-Curves", Activity],
@@ -961,19 +1039,25 @@ export default function App() {
     ["wbs-readonly", "WBS View", ClipboardList]
   ];
 
-  const menu = portal === "ipp" ? ippMenu : epcMenu;
+  const menu = isIpp ? ippMenu : epcMenu;
 
   return (
-    <div className={`app-shell ${portal === "epc" ? "epc-portal" : "ipp-portal"}`}>
+    <div className={`app-shell ${isEpc ? "epc-portal" : "ipp-portal"}`}>
       <aside>
         <div className="brand">
-          {portal === "ipp" ? "IPP Control Center" : "EPC Weekly Portal"}
-          <span>{portal === "ipp" ? "Owner / Committente" : "Restricted operational access"}</span>
+          {isIpp ? "Helios CM" : "EPC Weekly Portal"}
+          <span>{isIpp ? "IPP Control Center" : "Restricted operational access"}</span>
         </div>
 
-        <div className="portal-switch">
-          <button onClick={() => setPortal(null)}>Cambia portale</button>
-        </div>
+        <UserBadge profile={auth.profile} onLogout={handleLogout} />
+
+        {canAccessIpp(role) && canAccessEpc(role) && (
+          <div className="portal-switch">
+            <button onClick={() => { setPortal(isIpp ? "epc" : "ipp"); setPage(isIpp ? "epc" : "portfolio"); }}>
+              Passa a portale {isIpp ? "EPC" : "IPP"}
+            </button>
+          </div>
+        )}
 
         <nav>
           {menu.map(([id, label, Icon]) => (
@@ -985,25 +1069,25 @@ export default function App() {
 
         <div className="side-footer">
           <CheckCircle2 size={14} />
-          {portal === "ipp" ? "IPP full access" : "EPC limited access"}
+          {isIpp ? "IPP access" : "EPC limited access"}
         </div>
       </aside>
 
       <main>
         {loading && <Placeholder title="Caricamento dati..." subtitle="Connessione a Supabase in corso." icon={Activity} />}
 
-        {!loading && portal === "ipp" && page === "portfolio" && <PortfolioHome projects={projects} issues={issues} source={source} onReload={reload} onOpenProject={openProject} />}
-        {!loading && portal === "ipp" && page === "project" && <ProjectPage project={selectedProject} setPage={setPage} />}
-        {!loading && portal === "ipp" && page === "wbs" && <WbsSetup selectedProject={selectedProject} />}
-        {!loading && portal === "ipp" && page === "weekly-review" && <WeeklyReview selectedProject={selectedProject} />}
-        {!loading && portal === "ipp" && page === "epc" && <EpcWeeklyInput selectedProject={selectedProject} />}
-        {!loading && portal === "ipp" && page === "curves" && <CurvesPage curve={curve} />}
-        {!loading && portal === "ipp" && page === "cod" && <Placeholder title="COD Center" subtitle="Readiness, commissioning, documentazione e DSO." icon={Gauge} />}
-        {!loading && portal === "ipp" && page === "issues" && <Placeholder title="Risk Center" subtitle="Issues, owner, scadenze e impatto COD." icon={AlertTriangle} />}
-        {!loading && portal === "ipp" && page === "reports" && <Placeholder title="Management Reports" subtitle="Report settimanale per direzione e management." icon={FileSpreadsheet} />}
+        {!loading && isIpp && page === "portfolio" && <PortfolioHome projects={projects} issues={issues} source={source} onReload={reload} onOpenProject={openProject} />}
+        {!loading && isIpp && page === "project" && <ProjectPage project={selectedProject} setPage={setPage} />}
+        {!loading && isIpp && page === "wbs" && <WbsSetup selectedProject={selectedProject} />}
+        {!loading && isIpp && page === "weekly-review" && <WeeklyReview selectedProject={selectedProject} />}
+        {!loading && isIpp && page === "epc" && <EpcWeeklyInput selectedProject={selectedProject} />}
+        {!loading && isIpp && page === "curves" && <CurvesPage curve={curve} />}
+        {!loading && isIpp && page === "cod" && <Placeholder title="COD Center" subtitle="Readiness, commissioning, documentazione e DSO." icon={Gauge} />}
+        {!loading && isIpp && page === "issues" && <Placeholder title="Risk Center" subtitle="Issues, owner, scadenze e impatto COD." icon={AlertTriangle} />}
+        {!loading && isIpp && page === "reports" && <Placeholder title="Management Reports" subtitle="Report settimanale per direzione e management." icon={FileSpreadsheet} />}
 
-        {!loading && portal === "epc" && page === "epc" && <EpcWeeklyInput selectedProject={selectedProject} />}
-        {!loading && portal === "epc" && page === "wbs-readonly" && <EpcWbsReadOnly selectedProject={selectedProject} />}
+        {!loading && isEpc && page === "epc" && <EpcWeeklyInput selectedProject={selectedProject} />}
+        {!loading && isEpc && page === "wbs-readonly" && <EpcWbsReadOnly selectedProject={selectedProject} />}
       </main>
     </div>
   );

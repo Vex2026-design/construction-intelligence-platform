@@ -102,3 +102,43 @@ create table if not exists weekly_review_log (
   reason text,
   created_at timestamp with time zone default now()
 );
+
+
+-- V1.0 Login, Roles & Permissions
+
+create table if not exists user_profiles (
+  id uuid primary key,
+  email text unique not null,
+  full_name text,
+  role text not null default 'pm_ipp',
+  company text,
+  active boolean default true,
+  created_at timestamp with time zone default now()
+);
+
+create table if not exists project_user_access (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references user_profiles(id) on delete cascade,
+  project_code text not null,
+  access_level text default 'read',
+  created_at timestamp with time zone default now(),
+  unique(user_id, project_code)
+);
+
+create table if not exists audit_log (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid,
+  email text,
+  action text not null,
+  entity text,
+  entity_id text,
+  old_value jsonb,
+  new_value jsonb,
+  created_at timestamp with time zone default now()
+);
+
+alter table weekly_quantity_updates
+add column if not exists submitted_by_user uuid;
+
+alter table weekly_quantity_updates
+add column if not exists reviewed_by_user uuid;
