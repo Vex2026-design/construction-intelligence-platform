@@ -1,23 +1,31 @@
-# Construction Intelligence Platform V1 Clean
+# Helios CM 1.0 Foundation
 
-Versione pulita e testabile per Vercel.
+Software completo foundation per Construction Governance IPP.
+
+## Moduli inclusi
+- Login / ruoli / portali IPP-EPC
+- Portfolio Executive IPP
+- IPP Analytics
+- Project Room
+- WBS Setup modificabile
+- EPC Weekly Input
+- Weekly Review IPP con Approve / Reject
+- Admin Users base
+- Schema Supabase consolidato
+- Edge Function per invito utenti
 
 ## Deploy
+1. Carica tutto su GitHub.
+2. Vercel deploy automatico.
+3. In Supabase esegui `supabase/schema.sql`.
+4. Imposta variabili Vercel:
+   - VITE_SUPABASE_URL
+   - VITE_SUPABASE_ANON_KEY
 
-1. Carica tutti i file nel repository GitHub.
-2. In Vercel assicurati di avere:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-3. Vercel builda con:
-   - `npm run build`
-   - output `dist`
+## Test rapido
+Puoi entrare con:
+- Demo IPP
+- Demo EPC
 
-## Funzioni V1
-
-- Executive Dashboard
-- Portfolio Cards
-- Project Room
-- Import SAL placeholder
-- COD placeholder
-- Risk Center placeholder
-- Supabase live data con fallback demo
+Commit:
+Helios CM 1.0 foundation
