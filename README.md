@@ -1,31 +1,34 @@
-# Helios CM 1.0 Foundation
+# Helios CM — Unified Repository
 
-Software completo foundation per Construction Governance IPP.
+Repository unico e pulito per Helios CM.
 
-## Moduli inclusi
-- Login / ruoli / portali IPP-EPC
-- Portfolio Executive IPP
+## Contenuto
+- React + Vite frontend
+- Supabase schema consolidato
+- Login / ruoli
+- Portale IPP
+- Portale EPC
+- WBS Engine
+- Weekly Input
+- Weekly Review
+- Admin Governance
+- Calculation Engine
 - IPP Analytics
-- Project Room
-- WBS Setup modificabile
-- EPC Weekly Input
-- Weekly Review IPP con Approve / Reject
-- Admin Users base
-- Schema Supabase consolidato
-- Edge Function per invito utenti
+- Snapshot e Alert
 
 ## Deploy
-1. Carica tutto su GitHub.
-2. Vercel deploy automatico.
+1. Carica tutto su GitHub sovrascrivendo il repository attuale.
+2. Vercel farà il deploy automatico.
 3. In Supabase esegui `supabase/schema.sql`.
-4. Imposta variabili Vercel:
-   - VITE_SUPABASE_URL
-   - VITE_SUPABASE_ANON_KEY
+4. In Vercel imposta:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
 
-## Test rapido
-Puoi entrare con:
+## Test veloce
+Puoi usare i pulsanti:
 - Demo IPP
 - Demo EPC
 
-Commit:
-Helios CM 1.0 foundation
+## Regola prodotto
+Le dashboard IPP usano solo dati approvati.
+Se non ci sono Weekly approvati, le statistiche restano vuote.

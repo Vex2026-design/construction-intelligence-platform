@@ -127,3 +127,67 @@ add column if not exists admin_override_at timestamp with time zone;
 
 alter table weekly_quantity_updates
 add column if not exists admin_override_by text;
+
+
+-- Calculation Engine tables
+
+create table if not exists project_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  project_code text not null,
+  week_start date not null,
+  planned numeric,
+  forecast numeric,
+  actual numeric,
+  delta_planned numeric,
+  delta_forecast numeric,
+  spi numeric,
+  health integer,
+  status text,
+  cod_forecast date,
+  disciplines jsonb,
+  created_at timestamp with time zone default now(),
+  unique(project_code, week_start)
+);
+
+create table if not exists alerts (
+  id uuid primary key default gen_random_uuid(),
+  project_code text,
+  severity text,
+  title text not null,
+  message text,
+  status text default 'Open',
+  created_at timestamp with time zone default now(),
+  closed_at timestamp with time zone
+);
+
+-- WBS template seed for all standard projects if missing
+insert into wbs_activities(project_code,level1,level1_weight,level2,level2_weight,activity,activity_weight,unit,quantity_total,planned_start,planned_finish,active)
+select p.project_code, x.level1, x.level1_weight, x.level2, x.level2_weight, x.activity, x.activity_weight, x.unit, x.quantity_total, x.planned_start::date, x.planned_finish::date, true
+from (values ('V0015'),('V0021'),('V0012'),('V0057')) as p(project_code)
+cross join (values
+('Ingegneria',10,null,null,'Prima Emissione PE',20,'n°',1,'2025-11-01','2025-12-01'),
+('Ingegneria',10,null,null,'Emissione Finale PE',10,'n°',1,'2025-12-01','2025-12-31'),
+('Ingegneria',10,null,null,'As built e fascicolo finale',5,'n°',1,'2026-07-30','2026-07-30'),
+('Procurement',15,null,null,'Ordine Moduli',5,'n°',1,'2025-12-15','2025-12-15'),
+('Procurement',15,null,null,'Ordine Inverter',5,'n°',1,'2026-01-31','2026-01-31'),
+('Procurement',15,null,null,'Ordine Strutture',15,'n°',1,'2025-11-30','2025-11-30'),
+('Construction',75,'Opere Civili',10,'Recinzione',15,'ml',1310,'2026-02-09','2026-03-03'),
+('Construction',75,'Opere Civili',10,'Fondazioni cabine',10,'n°',4,'2026-03-30','2026-04-24'),
+('Construction',75,'Opere Civili',10,'Scavi per cavi MT/BT',10,'ml',823,'2026-03-23','2026-04-10'),
+('Construction',75,'Opere Civili',10,'Viabilità interna',5,'mq',511,'2026-04-10','2026-05-18'),
+('Construction',75,'Opere Meccaniche',30,'Battitura Pali',40,'n°',858,'2026-02-18','2026-03-31'),
+('Construction',75,'Opere Meccaniche',30,'Sovrastrutture tipo 1',30,'n°',286,'2026-03-16','2026-05-01'),
+('Construction',75,'Opere Meccaniche',30,'Montaggio Moduli',25,'n°',7436,'2026-04-02','2026-06-10'),
+('Construction',75,'Opere Elettriche',38,'Stringatura moduli',10,'n°',286,'2026-05-07','2026-07-01'),
+('Construction',75,'Opere Elettriche',38,'Montaggio e cablaggio Inverter',10,'n°',17,'2026-05-18','2026-06-16'),
+('Construction',75,'Opere Elettriche',38,'Stesura Cavi BT Inverter',10,'ml',6488,'2026-03-30','2026-04-27'),
+('Construction',75,'Opere Elettriche',38,'Stesura Cavi MT',10,'ml',402,'2026-04-06','2026-04-13'),
+('Construction',75,'Collaudi e Commissioning',6,'Collaudo Tracker',20,'nr',286,'2026-07-20','2026-07-31'),
+('Construction',75,'Collaudi e Commissioning',6,'Configurazione Inverter e monitoraggio',10,'nr',1,'2026-09-01','2026-09-09'),
+('Construction',75,'Opere di Rete',16,'Scavi e reinterri',20,'ml',2350,'2026-04-13','2026-05-15'),
+('Construction',75,'Opere di Rete',16,'TOC',20,'ml',380,'2026-04-30','2026-05-17'),
+('Construction',75,'Opere di Rete',16,'Stesura Cavo',15,'ml',2500,'2026-05-15','2026-06-11')
+) as x(level1,level1_weight,level2,level2_weight,activity,activity_weight,unit,quantity_total,planned_start,planned_finish)
+where not exists (
+  select 1 from wbs_activities w where w.project_code = p.project_code and w.activity = x.activity and coalesce(w.level2,'') = coalesce(x.level2,'')
+);
