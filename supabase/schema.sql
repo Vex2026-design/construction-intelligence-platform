@@ -47,24 +47,39 @@ create table if not exists issues (
 );
 
 
-create table if not exists phase_progress (
+-- WBS + EPC Weekly Input
+
+create table if not exists wbs_activities (
   id uuid primary key default gen_random_uuid(),
-  sal_import_id uuid references sal_imports(id) on delete cascade,
-  project_id uuid references projects(id) on delete cascade,
-  phase text,
-  planned numeric,
-  forecast numeric,
-  actual numeric,
-  delta_plan numeric,
-  delta_forecast numeric
+  project_code text not null,
+  level1 text not null,
+  level1_weight numeric,
+  level2 text,
+  level2_weight numeric,
+  activity text not null,
+  activity_weight numeric,
+  unit text,
+  quantity_total numeric,
+  planned_start date,
+  planned_finish date,
+  active boolean default true,
+  created_at timestamp with time zone default now()
 );
 
-create table if not exists s_curve_points (
+create table if not exists weekly_quantity_updates (
   id uuid primary key default gen_random_uuid(),
-  sal_import_id uuid references sal_imports(id) on delete cascade,
-  project_id uuid references projects(id) on delete cascade,
-  point_date date,
-  planned numeric,
-  forecast numeric,
-  actual numeric
+  project_code text not null,
+  wbs_activity_id uuid references wbs_activities(id) on delete cascade,
+  week_start date not null,
+  qty_previous numeric default 0,
+  qty_week numeric default 0,
+  qty_cumulative numeric default 0,
+  progress_pct numeric default 0,
+  notes text,
+  status text default 'Draft',
+  submitted_by text,
+  submitted_at timestamp with time zone,
+  reviewed_by text,
+  reviewed_at timestamp with time zone,
+  created_at timestamp with time zone default now()
 );

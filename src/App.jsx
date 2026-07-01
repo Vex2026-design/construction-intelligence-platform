@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   RefreshCw,
   UploadCloud,
+  ClipboardList,
   Zap
 } from "lucide-react";
 import {
@@ -30,7 +31,7 @@ import {
   RadialBar
 } from "recharts";
 import { getIssues, getLatestPortfolio, getPortfolioCurve } from "./lib/dataApi";
-import { parseWeeklyReport, saveWeeklyReport } from "./lib/weeklyImport";
+import { getWbsActivities, saveWeeklyUpdates, calculateProgressFromWbs } from "./lib/wbsApi";
 
 const pct = (v) => `${((v || 0) * 100).toFixed(1)}%`;
 const signedPct = (v) => `${v >= 0 ? "+" : ""}${((v || 0) * 100).toFixed(1)}%`;
@@ -351,105 +352,234 @@ function ProjectRoom({ project }) {
   );
 }
 
-function ImportSal({ onImported }) {
-  const [parsed, setParsed] = useState(null);
+function ImportSal() {
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <span className="eyebrow">Import</span>
+          <h1>Import SAL EPC</h1>
+          <p>Prossimo modulo: upload del SAL e parsing automatico nel database.</p>
+        </div>
+      </div>
+      <div className="panel upload-panel">
+        <FileSpreadsheet size={46} />
+        <h2>Trascina qui il SAL Excel</h2>
+        <p>Il sistema riconoscerà progetto, percentuali, curve S e fasi WBS.</p>
+        <button className="primary-btn">Seleziona file</button>
+      </div>
+    </div>
+  );
+}
+
+
+function WbsSetup() {
+  const [rows, setRows] = useState([]);
+  const [projectCode, setProjectCode] = useState("TEMPLATE");
   const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [success, setSuccess] = useState("");
 
-  async function handleFile(event) {
+  async function load() {
     setError("");
-    setSuccess("");
-    const file = event.target.files?.[0];
-    if (!file) return;
-
     try {
-      const result = await parseWeeklyReport(file);
-      setParsed(result);
+      const data = await getWbsActivities(projectCode);
+      setRows(data);
     } catch (err) {
       setError(err.message || String(err));
-      setParsed(null);
     }
   }
 
-  async function handleSave() {
-    if (!parsed) return;
-    setSaving(true);
-    setError("");
-    setSuccess("");
+  useEffect(() => {
+    load();
+  }, [projectCode]);
 
-    try {
-      const result = await saveWeeklyReport(parsed);
-      setSuccess(`Import completato: ${result.project.name} - SAL ${parsed.controlDate}`);
-      setParsed(null);
-      await onImported?.();
-    } catch (err) {
-      setError(err.message || String(err));
-    } finally {
-      setSaving(false);
-    }
-  }
+  const grouped = rows.reduce((acc, r) => {
+    const key = `${r.level1}${r.level2 ? " / " + r.level2 : ""}`;
+    acc[key] = acc[key] || [];
+    acc[key].push(r);
+    return acc;
+  }, {});
 
   return (
     <div className="page">
       <div className="page-header">
         <div>
-          <span className="eyebrow">Import reale</span>
-          <h1>Import Weekly Report EPC</h1>
-          <p>Carica il file Excel dell'EPC: l'app legge Overall, fasi e Curve S e salva tutto in Supabase.</p>
+          <span className="eyebrow">Setup</span>
+          <h1>WBS Setup</h1>
+          <p>Struttura attività del progetto. Da qui nasce l’input settimanale EPC.</p>
         </div>
+        <select value={projectCode} onChange={(e) => setProjectCode(e.target.value)}>
+          <option value="TEMPLATE">TEMPLATE</option>
+          <option value="V0015">V0015 Atzori</option>
+          <option value="V0021">V0021 Friargiu</option>
+          <option value="V0012">V0012 Loffreda</option>
+          <option value="V0057">V0057 Bertolin</option>
+        </select>
       </div>
 
-      <div className="panel upload-panel">
-        <FileSpreadsheet size={46} />
-        <h2>Carica Weekly Report / SAL Excel</h2>
-        <p>Formato atteso: foglio Report/Foglio1 con Overall e foglio “Curve S”.</p>
-        <label className="file-btn">
-          Seleziona file Excel
-          <input type="file" accept=".xlsx,.xlsm,.xls" onChange={handleFile} />
-        </label>
+      {error && <div className="alert error">{error}</div>}
+
+      <div className="panel">
+        <h2>WBS Activities</h2>
+        <p className="small">Attività lette dalla tabella Supabase <b>wbs_activities</b>.</p>
+        <div className="wbs-list">
+          {Object.entries(grouped).map(([group, items]) => (
+            <div className="wbs-group" key={group}>
+              <h3>{group}</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Attività</th>
+                    <th>UM</th>
+                    <th>Qty</th>
+                    <th>Peso</th>
+                    <th>Start</th>
+                    <th>Finish</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((r) => (
+                    <tr key={r.id}>
+                      <td>{r.activity}</td>
+                      <td>{r.unit}</td>
+                      <td>{Number(r.quantity_total || 0).toLocaleString("it-IT")}</td>
+                      <td>{r.activity_weight}%</td>
+                      <td>{r.planned_start || "-"}</td>
+                      <td>{r.planned_finish || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+          {!rows.length && <div className="empty-state">Nessuna WBS caricata. Esegui lo script wbs_seed_template.sql in Supabase.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EpcWeeklyInput() {
+  const [projectCode, setProjectCode] = useState("TEMPLATE");
+  const [weekStart, setWeekStart] = useState(new Date().toISOString().slice(0, 10));
+  const [rows, setRows] = useState([]);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  async function load() {
+    setError("");
+    setSuccess("");
+    try {
+      const data = await getWbsActivities(projectCode);
+      setRows(data.map((r) => ({ ...r, qty_previous: 0, qty_week: 0, notes: "" })));
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, [projectCode]);
+
+  function updateRow(id, field, value) {
+    setRows((prev) => prev.map((r) => r.id === id ? { ...r, [field]: value } : r));
+  }
+
+  async function submit() {
+    setError("");
+    setSuccess("");
+    try {
+      await saveWeeklyUpdates(projectCode, weekStart, rows);
+      const progress = calculateProgressFromWbs(rows);
+      setSuccess(`Aggiornamento EPC salvato. Progress WBS stimato: ${(progress * 100).toFixed(2)}%`);
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  }
+
+  const grouped = rows.reduce((acc, r) => {
+    const key = `${r.level1}${r.level2 ? " / " + r.level2 : ""}`;
+    acc[key] = acc[key] || [];
+    acc[key].push(r);
+    return acc;
+  }, {});
+
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <span className="eyebrow">EPC Area</span>
+          <h1>EPC Weekly Input</h1>
+          <p>L’EPC compila le quantità settimanali per attività WBS. Il sistema calcola progress e curve.</p>
+        </div>
+        <div className="input-row">
+          <select value={projectCode} onChange={(e) => setProjectCode(e.target.value)}>
+            <option value="TEMPLATE">TEMPLATE</option>
+            <option value="V0015">V0015 Atzori</option>
+            <option value="V0021">V0021 Friargiu</option>
+            <option value="V0012">V0012 Loffreda</option>
+            <option value="V0057">V0057 Bertolin</option>
+          </select>
+          <input type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} />
+        </div>
       </div>
 
       {error && <div className="alert error">{error}</div>}
       {success && <div className="alert success">{success}</div>}
 
-      {parsed && (
-        <div className="grid two">
-          <section className="panel">
-            <h2>Anteprima import</h2>
-            <div className="preview-grid">
-              <div><span>File</span><b>{parsed.fileName}</b></div>
-              <div><span>Progetto</span><b>{parsed.projectCode || "Non riconosciuto"}</b></div>
-              <div><span>Sheet</span><b>{parsed.reportSheetName}</b></div>
-              <div><span>Data SAL</span><b>{parsed.controlDate}</b></div>
-              <div><span>Planned</span><b>{pct(parsed.overall.planned)}</b></div>
-              <div><span>Forecast</span><b>{pct(parsed.overall.forecast)}</b></div>
-              <div><span>Actual</span><b>{pct(parsed.overall.actual)}</b></div>
-              <div><span>Δ Planned</span><b className={parsed.overall.deltaPlan < 0 ? "negative" : "positive"}>{signedPct(parsed.overall.deltaPlan)}</b></div>
-              <div><span>Δ Forecast</span><b className={parsed.overall.deltaForecast < 0 ? "negative" : "positive"}>{signedPct(parsed.overall.deltaForecast)}</b></div>
-              <div><span>Fasi lette</span><b>{parsed.phases.length}</b></div>
-              <div><span>Punti Curve S</span><b>{parsed.curve.length}</b></div>
-              <div><span>Status</span><b>{parsed.status}</b></div>
-            </div>
-
-            <button className="primary-btn save-btn" onClick={handleSave} disabled={saving}>
-              {saving ? "Salvataggio..." : "Salva in Supabase"}
-            </button>
-          </section>
-
-          <section className="panel">
-            <h2>Fasi lette dal file</h2>
-            <div className="phase-preview">
-              {parsed.phases.slice(0, 10).map((p) => (
-                <MiniBar key={p.phase} label={p.phase} value={p.actual} type="actual" />
-              ))}
-            </div>
-          </section>
+      <div className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>Quantity Update</h2>
+            <p>Compilare Qty precedente e Qty settimana. Il cumulato e il progress vengono calcolati automaticamente.</p>
+          </div>
+          <button className="primary-btn" onClick={submit}>Submit EPC Update</button>
         </div>
-      )}
+
+        {Object.entries(grouped).map(([group, items]) => (
+          <div className="wbs-group" key={group}>
+            <h3>{group}</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Attività</th>
+                  <th>UM</th>
+                  <th>Qty Totale</th>
+                  <th>Qty Prec.</th>
+                  <th>Qty Settimana</th>
+                  <th>Progress</th>
+                  <th>Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((r) => {
+                  const total = Number(r.quantity_total || 0);
+                  const prev = Number(r.qty_previous || 0);
+                  const week = Number(r.qty_week || 0);
+                  const cum = Math.min(total, prev + week);
+                  const progress = total > 0 ? cum / total : 0;
+
+                  return (
+                    <tr key={r.id}>
+                      <td>{r.activity}</td>
+                      <td>{r.unit}</td>
+                      <td>{total.toLocaleString("it-IT")}</td>
+                      <td><input className="table-input" type="number" value={r.qty_previous} onChange={(e) => updateRow(r.id, "qty_previous", e.target.value)} /></td>
+                      <td><input className="table-input" type="number" value={r.qty_week} onChange={(e) => updateRow(r.id, "qty_week", e.target.value)} /></td>
+                      <td>{(progress * 100).toFixed(1)}%</td>
+                      <td><input className="table-input wide" value={r.notes} onChange={(e) => updateRow(r.id, "notes", e.target.value)} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ))}
+        {!rows.length && <div className="empty-state">Nessuna WBS caricata. Esegui lo script wbs_seed_template.sql in Supabase.</div>}
+      </div>
     </div>
   );
 }
+
 
 function Placeholder({ title, subtitle, icon: Icon }) {
   return (
@@ -483,6 +613,8 @@ export default function App() {
     ["executive", "Executive", LayoutDashboard],
     ["portfolio", "Portfolio", Factory],
     ["project", "Project Room", Zap],
+    ["wbs", "WBS Setup", ClipboardList],
+    ["epc", "EPC Weekly Input", UploadCloud],
     ["import", "Import SAL", UploadCloud],
     ["cod", "COD Center", Gauge],
     ["issues", "Risk Center", AlertTriangle],
@@ -520,7 +652,9 @@ export default function App() {
         {!loading && page === "executive" && <Executive projects={projects} issues={issues} curve={curve} source={source} onReload={reload} onOpenProject={openProject} />}
         {!loading && page === "portfolio" && <Portfolio projects={projects} onOpenProject={openProject} />}
         {!loading && page === "project" && <ProjectRoom project={selectedProject} />}
-        {!loading && page === "import" && <ImportSal onImported={reload} />}
+        {!loading && page === "wbs" && <WbsSetup />}
+        {!loading && page === "epc" && <EpcWeeklyInput />}
+        {!loading && page === "import" && <ImportSal />}
         {!loading && page === "cod" && <Placeholder title="COD Center" subtitle="Readiness, documenti, commissioning, Enel/DSO e handover." icon={Gauge} />}
         {!loading && page === "issues" && <Placeholder title="Risk Center" subtitle="Issues, decision log, owner, scadenze e impatto COD." icon={AlertTriangle} />}
         {!loading && page === "reports" && <Placeholder title="Management Reports" subtitle="Report settimanale per direzione e management." icon={FileSpreadsheet} />}
