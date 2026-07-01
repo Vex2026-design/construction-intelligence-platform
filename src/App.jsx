@@ -3,16 +3,16 @@ import {
   Activity,
   AlertTriangle,
   ArrowDownRight,
+  Building2,
   CalendarDays,
   CheckCircle2,
-  CircleDot,
+  ClipboardList,
   Factory,
   FileSpreadsheet,
   Gauge,
   LayoutDashboard,
   RefreshCw,
   UploadCloud,
-  ClipboardList,
   Zap
 } from "lucide-react";
 import {
@@ -58,10 +58,7 @@ function useData() {
     setLoading(false);
   }
 
-  useEffect(() => {
-    load();
-  }, []);
-
+  useEffect(() => { load(); }, []);
   return { projects, issues, curve, source, loading, reload: load };
 }
 
@@ -94,42 +91,7 @@ function MiniBar({ label, value, type }) {
   );
 }
 
-function ProjectCard({ project, onOpen }) {
-  return (
-    <button className="project-card" onClick={() => onOpen(project)}>
-      <div className="project-card-head">
-        <div>
-          <h3>{project.name}</h3>
-          <p>{project.code} · {project.technology || "PV"} · {project.mwDc.toFixed(1)} MW</p>
-        </div>
-        <StatusBadge status={project.status} />
-      </div>
-
-      <div className="project-progress">
-        <MiniBar label="Planned" value={project.planned} type="planned" />
-        <MiniBar label="Forecast" value={project.forecast} type="forecast" />
-        <MiniBar label="Actual" value={project.actual} type="actual" />
-      </div>
-
-      <div className="project-footer">
-        <div>
-          <span>Δ Planned</span>
-          <b className={project.deltaPlanned < 0 ? "negative" : "positive"}>{signedPct(project.deltaPlanned)}</b>
-        </div>
-        <div>
-          <span>Δ Forecast</span>
-          <b className={project.deltaForecast < 0 ? "negative" : "positive"}>{signedPct(project.deltaForecast)}</b>
-        </div>
-        <div>
-          <span>Health</span>
-          <b>{project.health}/100</b>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function Executive({ projects, issues, curve, source, onReload, onOpenProject }) {
+function PortfolioHome({ projects, issues, source, onReload, onOpenProject }) {
   const stats = useMemo(() => {
     const totalMw = projects.reduce((a, p) => a + (p.mwDc || 0), 0);
     const avgActual = projects.reduce((a, p) => a + (p.actual || 0), 0) / Math.max(1, projects.length);
@@ -143,9 +105,9 @@ function Executive({ projects, issues, curve, source, onReload, onOpenProject })
     <div className="page">
       <div className="hero">
         <div>
-          <span className="eyebrow">IPP Construction Control</span>
-          <h1>Construction Intelligence Platform</h1>
-          <p>Portfolio, SAL EPC, curve S, rischi e COD in un unico centro di controllo.</p>
+          <span className="eyebrow">Portfolio Command Center</span>
+          <h1>Construction Intelligence Platform V2</h1>
+          <p>Gestione project-first: ogni impianto ha WBS, weekly input EPC, progress, rischi e COD.</p>
           <div className="source-pill">
             <CheckCircle2 size={14} />
             Data source: {source === "supabase" ? "Supabase live" : "Demo fallback"}
@@ -158,22 +120,31 @@ function Executive({ projects, issues, curve, source, onReload, onOpenProject })
       </div>
 
       <div className="kpi-grid">
-        <KpiCard icon={Factory} label="MW monitorati" value={stats.totalMw.toFixed(1)} note="da SAL caricati" />
-        <KpiCard icon={LayoutDashboard} label="Progetti" value={projects.length} note="in construction" />
-        <KpiCard icon={Activity} label="Actual medio" value={pct(stats.avgActual)} note="portfolio progress" />
+        <KpiCard icon={Factory} label="MW monitorati" value={stats.totalMw.toFixed(1)} note="portfolio construction" />
+        <KpiCard icon={LayoutDashboard} label="Progetti" value={projects.length} note="con WBS / SAL" />
+        <KpiCard icon={Activity} label="Actual medio" value={pct(stats.avgActual)} note="progress portfolio" />
         <KpiCard icon={ArrowDownRight} label="Δ Planned" value={signedPct(stats.avgDelta)} note="scostamento medio" tone={stats.avgDelta < 0 ? "danger" : "success"} />
         <KpiCard icon={AlertTriangle} label="A rischio" value={stats.atRisk} note="attention / critical" tone={stats.atRisk > 0 ? "warning" : "success"} />
-        <KpiCard icon={Gauge} label="Health Index" value={`${stats.avgHealth.toFixed(0)}/100`} note="score portfolio" />
+        <KpiCard icon={Gauge} label="Health Index" value={`${stats.avgHealth.toFixed(0)}/100`} note="score medio" />
       </div>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>Projects</h2>
+            <p>Apri il progetto per vedere WBS, progress, weekly input EPC e COD.</p>
+          </div>
+        </div>
+        <div className="project-grid large">
+          {projects.map((p) => (
+            <ProjectCard key={p.code} project={p} onOpen={() => onOpenProject(p)} />
+          ))}
+        </div>
+      </section>
 
       <div className="grid two">
         <section className="panel">
-          <div className="panel-head">
-            <div>
-              <h2>Portfolio Progress</h2>
-              <p>Confronto Planned / Forecast / Actual per progetto</p>
-            </div>
-          </div>
+          <h2>Portfolio Progress</h2>
           <ResponsiveContainer width="100%" height={360}>
             <BarChart data={projects} layout="vertical" margin={{ left: 20, right: 20 }}>
               <CartesianGrid stroke="rgba(255,255,255,.10)" horizontal={false} />
@@ -189,50 +160,7 @@ function Executive({ projects, issues, curve, source, onReload, onOpenProject })
         </section>
 
         <section className="panel">
-          <div className="panel-head">
-            <div>
-              <h2>Portfolio S-Curve</h2>
-              <p>Linea tratteggiata = ultimo SAL disponibile</p>
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={360}>
-            <LineChart data={curve}>
-              <CartesianGrid stroke="rgba(255,255,255,.10)" />
-              <XAxis dataKey="date" stroke="#91a8c7" />
-              <YAxis domain={[0, 1]} tickFormatter={(v) => `${v * 100}%`} stroke="#91a8c7" />
-              <Tooltip formatter={(v) => v == null ? "-" : pct(v)} contentStyle={{ background: "#101c2f", border: "1px solid #2a4366", borderRadius: 12 }} />
-              <Legend />
-              <ReferenceLine x="2026-06-27" stroke="#fff" strokeDasharray="6 6" label={{ value: "Ultimo SAL", fill: "#fff" }} />
-              <Line type="monotone" dataKey="planned" stroke="#55d7ff" strokeWidth={3} dot={false} />
-              <Line type="monotone" dataKey="forecast" stroke="#ffb020" strokeWidth={3} dot={false} />
-              <Line type="monotone" dataKey="actual" stroke="#2ecc71" strokeWidth={3} dot={{ r: 4 }} connectNulls={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </section>
-      </div>
-
-      <div className="grid two">
-        <section className="panel">
-          <div className="panel-head">
-            <div>
-              <h2>Project Portfolio</h2>
-              <p>Apri una card per entrare nella Project Room</p>
-            </div>
-          </div>
-          <div className="project-grid">
-            {projects.map((p) => (
-              <ProjectCard key={p.code} project={p} onOpen={onOpenProject} />
-            ))}
-          </div>
-        </section>
-
-        <section className="panel">
-          <div className="panel-head">
-            <div>
-              <h2>Management Attention</h2>
-              <p>Issue aperte e punti da portare in riunione</p>
-            </div>
-          </div>
+          <h2>Management Attention</h2>
           <div className="issues-list">
             {issues.length ? issues.map((issue) => (
               <div className="issue" key={issue.id}>
@@ -243,9 +171,7 @@ function Executive({ projects, issues, curve, source, onReload, onOpenProject })
                 </div>
                 <b className={`impact ${issue.impact?.toLowerCase() || "medium"}`}>{issue.impact}</b>
               </div>
-            )) : (
-              <div className="empty-state">Nessuna issue aperta.</div>
-            )}
+            )) : <div className="empty-state">Nessuna issue aperta.</div>}
           </div>
         </section>
       </div>
@@ -253,30 +179,35 @@ function Executive({ projects, issues, curve, source, onReload, onOpenProject })
   );
 }
 
-function Portfolio({ projects, onOpenProject }) {
+function ProjectCard({ project, onOpen }) {
   return (
-    <div className="page">
-      <div className="page-header">
+    <button className="project-card" onClick={onOpen}>
+      <div className="project-card-head">
         <div>
-          <span className="eyebrow">Portfolio</span>
-          <h1>Project Portfolio</h1>
-          <p>Vista di controllo dei progetti in construction.</p>
+          <h3>{project.name}</h3>
+          <p>{project.code} · {project.technology || "PV"} · {project.mwDc.toFixed(1)} MW</p>
         </div>
+        <StatusBadge status={project.status} />
       </div>
-      <div className="project-grid large">
-        {projects.map((p) => <ProjectCard key={p.code} project={p} onOpen={onOpenProject} />)}
+      <div className="project-progress">
+        <MiniBar label="Planned" value={project.planned} type="planned" />
+        <MiniBar label="Forecast" value={project.forecast} type="forecast" />
+        <MiniBar label="Actual" value={project.actual} type="actual" />
       </div>
-    </div>
+      <div className="project-footer">
+        <div><span>Δ Planned</span><b className={project.deltaPlanned < 0 ? "negative" : "positive"}>{signedPct(project.deltaPlanned)}</b></div>
+        <div><span>Δ Forecast</span><b className={project.deltaForecast < 0 ? "negative" : "positive"}>{signedPct(project.deltaForecast)}</b></div>
+        <div><span>Health</span><b>{project.health}/100</b></div>
+      </div>
+    </button>
   );
 }
 
-function ProjectRoom({ project }) {
-  if (!project) {
-    return <div className="page"><h1>Project Room</h1><div className="panel empty-state">Seleziona un progetto.</div></div>;
-  }
-
-  const codValue = Math.max(15, Math.min(92, project.actual * 100 + 25));
+function ProjectPage({ project, setPage }) {
+  const codValue = project ? Math.max(15, Math.min(92, project.actual * 100 + 25)) : 0;
   const codData = [{ name: "COD", value: codValue, fill: "#2ecc71" }];
+
+  if (!project) return <div className="page"><div className="panel empty-state">Seleziona un progetto.</div></div>;
 
   return (
     <div className="page">
@@ -286,15 +217,26 @@ function ProjectRoom({ project }) {
           <h1>{project.name}</h1>
           <p>{project.mwDc.toFixed(1)} MW DC · ultimo SAL {project.lastSal || "-"}</p>
         </div>
-        <StatusBadge status={project.status} />
+        <div className="project-actions">
+          <StatusBadge status={project.status} />
+          <button className="primary-btn" onClick={() => setPage("epc")}>EPC Weekly Input</button>
+        </div>
       </div>
 
       <div className="kpi-grid five">
-        <KpiCard icon={Activity} label="Actual" value={pct(project.actual)} note="SAL EPC" />
+        <KpiCard icon={Activity} label="Actual" value={pct(project.actual)} note="SAL / WBS" />
         <KpiCard icon={CalendarDays} label="Planned" value={pct(project.planned)} note="baseline" />
-        <KpiCard icon={CircleDot} label="Forecast" value={pct(project.forecast)} note="EPC forecast" />
+        <KpiCard icon={Zap} label="Forecast" value={pct(project.forecast)} note="forecast EPC" />
         <KpiCard icon={ArrowDownRight} label="Δ Planned" value={signedPct(project.deltaPlanned)} note="scostamento" tone={project.deltaPlanned < 0 ? "danger" : "success"} />
         <KpiCard icon={Gauge} label="Health" value={`${project.health}/100`} note="score" />
+      </div>
+
+      <div className="project-tabs">
+        <button onClick={() => setPage("wbs")}>WBS</button>
+        <button onClick={() => setPage("epc")}>Weekly Input</button>
+        <button onClick={() => setPage("curves")}>Curve S</button>
+        <button onClick={() => setPage("cod")}>COD</button>
+        <button onClick={() => setPage("issues")}>Issues</button>
       </div>
 
       <div className="grid two">
@@ -305,7 +247,6 @@ function ProjectRoom({ project }) {
             <MiniBar label="Forecast" value={project.forecast} type="forecast" />
             <MiniBar label="Actual" value={project.actual} type="actual" />
           </div>
-
           <div className="discipline-list">
             {[
               ["Engineering", Math.min(1, project.actual + .35)],
@@ -314,9 +255,7 @@ function ProjectRoom({ project }) {
               ["Mechanical", Math.max(0, project.actual - .02)],
               ["Electrical", Math.max(0, project.actual - .12)],
               ["Commissioning", Math.max(0, project.actual - .28)]
-            ].map(([label, value]) => (
-              <MiniBar key={label} label={label} value={value} type="actual" />
-            ))}
+            ].map(([label, value]) => <MiniBar key={label} label={label} value={value} type="actual" />)}
           </div>
         </section>
 
@@ -332,51 +271,25 @@ function ProjectRoom({ project }) {
         </section>
       </div>
 
-      <div className="grid two">
-        <section className="panel">
-          <h2>AI Construction Analyst</h2>
-          <ul className="insight-list">
-            <li>{project.name} è a {pct(project.actual)} di avanzamento actual.</li>
-            <li>Delta vs planned: <b className={project.deltaPlanned < 0 ? "negative" : "positive"}>{signedPct(project.deltaPlanned)}</b>.</li>
-            <li>Delta vs forecast: <b className={project.deltaForecast < 0 ? "negative" : "positive"}>{signedPct(project.deltaForecast)}</b>.</li>
-            <li>{project.deltaForecast > -0.03 ? "Il forecast è sostanzialmente coerente con l'actual." : "Il forecast richiede verifica con EPC."}</li>
-          </ul>
-        </section>
-
-        <section className="panel">
-          <h2>IPP Notes</h2>
-          <textarea placeholder="Note PM IPP, decisioni, prossime azioni..." />
-        </section>
-      </div>
+      <section className="panel">
+        <h2>AI Construction Analyst</h2>
+        <ul className="insight-list">
+          <li>{project.name} è a {pct(project.actual)} di avanzamento actual.</li>
+          <li>Delta vs planned: <b className={project.deltaPlanned < 0 ? "negative" : "positive"}>{signedPct(project.deltaPlanned)}</b>.</li>
+          <li>Delta vs forecast: <b className={project.deltaForecast < 0 ? "negative" : "positive"}>{signedPct(project.deltaForecast)}</b>.</li>
+          <li>{project.deltaForecast > -0.03 ? "Il forecast è sostanzialmente coerente con l'actual." : "Il forecast richiede verifica con EPC."}</li>
+        </ul>
+      </section>
     </div>
   );
 }
 
-function ImportSal() {
-  return (
-    <div className="page">
-      <div className="page-header">
-        <div>
-          <span className="eyebrow">Import</span>
-          <h1>Import SAL EPC</h1>
-          <p>Prossimo modulo: upload del SAL e parsing automatico nel database.</p>
-        </div>
-      </div>
-      <div className="panel upload-panel">
-        <FileSpreadsheet size={46} />
-        <h2>Trascina qui il SAL Excel</h2>
-        <p>Il sistema riconoscerà progetto, percentuali, curve S e fasi WBS.</p>
-        <button className="primary-btn">Seleziona file</button>
-      </div>
-    </div>
-  );
-}
-
-
-function WbsSetup() {
+function WbsSetup({ selectedProject }) {
   const [rows, setRows] = useState([]);
-  const [projectCode, setProjectCode] = useState("TEMPLATE");
+  const [projectCode, setProjectCode] = useState(selectedProject?.code || "V0015");
   const [error, setError] = useState("");
+
+  useEffect(() => { if (selectedProject?.code) setProjectCode(selectedProject.code); }, [selectedProject]);
 
   async function load() {
     setError("");
@@ -388,9 +301,7 @@ function WbsSetup() {
     }
   }
 
-  useEffect(() => {
-    load();
-  }, [projectCode]);
+  useEffect(() => { load(); }, [projectCode]);
 
   const grouped = rows.reduce((acc, r) => {
     const key = `${r.level1}${r.level2 ? " / " + r.level2 : ""}`;
@@ -403,39 +314,23 @@ function WbsSetup() {
     <div className="page">
       <div className="page-header">
         <div>
-          <span className="eyebrow">Setup</span>
+          <span className="eyebrow">Project WBS</span>
           <h1>WBS Setup</h1>
-          <p>Struttura attività del progetto. Da qui nasce l’input settimanale EPC.</p>
+          <p>Ogni progetto ha la propria WBS, quantità, date e pesi.</p>
         </div>
-        <select value={projectCode} onChange={(e) => setProjectCode(e.target.value)}>
-          <option value="TEMPLATE">TEMPLATE</option>
-          <option value="V0015">V0015 Atzori</option>
-          <option value="V0021">V0021 Friargiu</option>
-          <option value="V0012">V0012 Loffreda</option>
-          <option value="V0057">V0057 Bertolin</option>
-        </select>
+        <ProjectSelect value={projectCode} onChange={setProjectCode} />
       </div>
 
       {error && <div className="alert error">{error}</div>}
 
       <div className="panel">
-        <h2>WBS Activities</h2>
-        <p className="small">Attività lette dalla tabella Supabase <b>wbs_activities</b>.</p>
+        <h2>WBS Activities - {projectCode}</h2>
         <div className="wbs-list">
           {Object.entries(grouped).map(([group, items]) => (
             <div className="wbs-group" key={group}>
               <h3>{group}</h3>
               <table>
-                <thead>
-                  <tr>
-                    <th>Attività</th>
-                    <th>UM</th>
-                    <th>Qty</th>
-                    <th>Peso</th>
-                    <th>Start</th>
-                    <th>Finish</th>
-                  </tr>
-                </thead>
+                <thead><tr><th>Attività</th><th>UM</th><th>Qty</th><th>Peso</th><th>Start</th><th>Finish</th></tr></thead>
                 <tbody>
                   {items.map((r) => (
                     <tr key={r.id}>
@@ -451,19 +346,21 @@ function WbsSetup() {
               </table>
             </div>
           ))}
-          {!rows.length && <div className="empty-state">Nessuna WBS caricata. Esegui lo script wbs_seed_template.sql in Supabase.</div>}
+          {!rows.length && <div className="empty-state">Nessuna WBS caricata per {projectCode}.</div>}
         </div>
       </div>
     </div>
   );
 }
 
-function EpcWeeklyInput() {
-  const [projectCode, setProjectCode] = useState("TEMPLATE");
+function EpcWeeklyInput({ selectedProject }) {
+  const [projectCode, setProjectCode] = useState(selectedProject?.code || "V0015");
   const [weekStart, setWeekStart] = useState(new Date().toISOString().slice(0, 10));
   const [rows, setRows] = useState([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  useEffect(() => { if (selectedProject?.code) setProjectCode(selectedProject.code); }, [selectedProject]);
 
   async function load() {
     setError("");
@@ -476,9 +373,7 @@ function EpcWeeklyInput() {
     }
   }
 
-  useEffect(() => {
-    load();
-  }, [projectCode]);
+  useEffect(() => { load(); }, [projectCode]);
 
   function updateRow(id, field, value) {
     setRows((prev) => prev.map((r) => r.id === id ? { ...r, [field]: value } : r));
@@ -509,16 +404,10 @@ function EpcWeeklyInput() {
         <div>
           <span className="eyebrow">EPC Area</span>
           <h1>EPC Weekly Input</h1>
-          <p>L’EPC compila le quantità settimanali per attività WBS. Il sistema calcola progress e curve.</p>
+          <p>Compilazione quantità settimanali per attività WBS. Il sistema calcola progress e curve.</p>
         </div>
         <div className="input-row">
-          <select value={projectCode} onChange={(e) => setProjectCode(e.target.value)}>
-            <option value="TEMPLATE">TEMPLATE</option>
-            <option value="V0015">V0015 Atzori</option>
-            <option value="V0021">V0021 Friargiu</option>
-            <option value="V0012">V0012 Loffreda</option>
-            <option value="V0057">V0057 Bertolin</option>
-          </select>
+          <ProjectSelect value={projectCode} onChange={setProjectCode} />
           <input type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} />
         </div>
       </div>
@@ -528,10 +417,7 @@ function EpcWeeklyInput() {
 
       <div className="panel">
         <div className="panel-head">
-          <div>
-            <h2>Quantity Update</h2>
-            <p>Compilare Qty precedente e Qty settimana. Il cumulato e il progress vengono calcolati automaticamente.</p>
-          </div>
+          <div><h2>Quantity Update - {projectCode}</h2><p>Inserisci Qty precedente e Qty settimana.</p></div>
           <button className="primary-btn" onClick={submit}>Submit EPC Update</button>
         </div>
 
@@ -539,17 +425,7 @@ function EpcWeeklyInput() {
           <div className="wbs-group" key={group}>
             <h3>{group}</h3>
             <table>
-              <thead>
-                <tr>
-                  <th>Attività</th>
-                  <th>UM</th>
-                  <th>Qty Totale</th>
-                  <th>Qty Prec.</th>
-                  <th>Qty Settimana</th>
-                  <th>Progress</th>
-                  <th>Note</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Attività</th><th>UM</th><th>Qty Totale</th><th>Qty Prec.</th><th>Qty Settimana</th><th>Progress</th><th>Note</th></tr></thead>
               <tbody>
                 {items.map((r) => {
                   const total = Number(r.quantity_total || 0);
@@ -557,7 +433,6 @@ function EpcWeeklyInput() {
                   const week = Number(r.qty_week || 0);
                   const cum = Math.min(total, prev + week);
                   const progress = total > 0 ? cum / total : 0;
-
                   return (
                     <tr key={r.id}>
                       <td>{r.activity}</td>
@@ -574,34 +449,62 @@ function EpcWeeklyInput() {
             </table>
           </div>
         ))}
-        {!rows.length && <div className="empty-state">Nessuna WBS caricata. Esegui lo script wbs_seed_template.sql in Supabase.</div>}
+        {!rows.length && <div className="empty-state">Nessuna WBS caricata per {projectCode}.</div>}
       </div>
     </div>
   );
 }
 
+function ProjectSelect({ value, onChange }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="V0015">V0015 Atzori</option>
+      <option value="V0021">V0021 Friargiu</option>
+      <option value="V0012">V0012 Loffreda</option>
+      <option value="V0057">V0057 Bertolin</option>
+      <option value="TEMPLATE">TEMPLATE</option>
+    </select>
+  );
+}
+
+function CurvesPage({ curve }) {
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div><span className="eyebrow">S-Curve</span><h1>Curve S</h1><p>Confronto Planned / Forecast / Actual.</p></div>
+      </div>
+      <section className="panel">
+        <ResponsiveContainer width="100%" height={430}>
+          <LineChart data={curve}>
+            <CartesianGrid stroke="rgba(255,255,255,.10)" />
+            <XAxis dataKey="date" stroke="#91a8c7" />
+            <YAxis domain={[0, 1]} tickFormatter={(v) => `${v * 100}%`} stroke="#91a8c7" />
+            <Tooltip formatter={(v) => v == null ? "-" : pct(v)} contentStyle={{ background: "#101c2f", border: "1px solid #2a4366", borderRadius: 12 }} />
+            <Legend />
+            <ReferenceLine x="2026-06-27" stroke="#fff" strokeDasharray="6 6" label={{ value: "Ultimo SAL", fill: "#fff" }} />
+            <Line type="monotone" dataKey="planned" stroke="#55d7ff" strokeWidth={3} dot={false} />
+            <Line type="monotone" dataKey="forecast" stroke="#ffb020" strokeWidth={3} dot={false} />
+            <Line type="monotone" dataKey="actual" stroke="#2ecc71" strokeWidth={3} dot={{ r: 4 }} connectNulls={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </section>
+    </div>
+  );
+}
 
 function Placeholder({ title, subtitle, icon: Icon }) {
   return (
     <div className="page">
       <div className="page-header">
-        <div>
-          <span className="eyebrow">Modulo</span>
-          <h1>{title}</h1>
-          <p>{subtitle}</p>
-        </div>
+        <div><span className="eyebrow">Modulo</span><h1>{title}</h1><p>{subtitle}</p></div>
       </div>
-      <div className="panel empty-module">
-        {Icon && <Icon size={44} />}
-        <h2>Modulo in sviluppo</h2>
-        <p>Questa sezione sarà collegata al database nella prossima iterazione.</p>
-      </div>
+      <div className="panel empty-module">{Icon && <Icon size={44} />}<h2>Modulo in sviluppo</h2><p>Questa sezione sarà collegata al database nella prossima iterazione.</p></div>
     </div>
   );
 }
 
 export default function App() {
-  const [page, setPage] = useState("executive");
+  const [page, setPage] = useState("portfolio");
   const { projects, issues, curve, source, loading, reload } = useData();
   const [selectedProject, setSelectedProject] = useState(null);
 
@@ -609,54 +512,45 @@ export default function App() {
     if (!selectedProject && projects.length) setSelectedProject(projects[0]);
   }, [projects, selectedProject]);
 
-  const menu = [
-    ["executive", "Executive", LayoutDashboard],
-    ["portfolio", "Portfolio", Factory],
-    ["project", "Project Room", Zap],
-    ["wbs", "WBS Setup", ClipboardList],
-    ["epc", "EPC Weekly Input", UploadCloud],
-    ["import", "Import SAL", UploadCloud],
-    ["cod", "COD Center", Gauge],
-    ["issues", "Risk Center", AlertTriangle],
-    ["reports", "Reports", FileSpreadsheet]
-  ];
-
   function openProject(project) {
     setSelectedProject(project);
     setPage("project");
   }
 
+  const menu = [
+    ["portfolio", "Portfolio", Building2],
+    ["project", "Project", Zap],
+    ["wbs", "WBS Setup", ClipboardList],
+    ["epc", "EPC Weekly Input", UploadCloud],
+    ["curves", "S-Curves", Activity],
+    ["cod", "COD Center", Gauge],
+    ["issues", "Risk Center", AlertTriangle],
+    ["reports", "Reports", FileSpreadsheet]
+  ];
+
   return (
     <div className="app-shell">
       <aside>
-        <div className="brand">
-          Construction<br />Intelligence<br />Platform
-          <span>IPP Control Layer</span>
-        </div>
+        <div className="brand">Construction<br />Intelligence<br />Platform<span>Project-first V2</span></div>
         <nav>
           {menu.map(([id, label, Icon]) => (
             <button key={id} className={page === id ? "active" : ""} onClick={() => setPage(id)}>
-              <Icon size={18} />
-              {label}
+              <Icon size={18} />{label}
             </button>
           ))}
         </nav>
-        <div className="side-footer">
-          <CheckCircle2 size={14} />
-          Supabase ready
-        </div>
+        <div className="side-footer"><CheckCircle2 size={14} />Supabase ready</div>
       </aside>
 
       <main>
         {loading && <Placeholder title="Caricamento dati..." subtitle="Connessione a Supabase in corso." icon={Activity} />}
-        {!loading && page === "executive" && <Executive projects={projects} issues={issues} curve={curve} source={source} onReload={reload} onOpenProject={openProject} />}
-        {!loading && page === "portfolio" && <Portfolio projects={projects} onOpenProject={openProject} />}
-        {!loading && page === "project" && <ProjectRoom project={selectedProject} />}
-        {!loading && page === "wbs" && <WbsSetup />}
-        {!loading && page === "epc" && <EpcWeeklyInput />}
-        {!loading && page === "import" && <ImportSal />}
-        {!loading && page === "cod" && <Placeholder title="COD Center" subtitle="Readiness, documenti, commissioning, Enel/DSO e handover." icon={Gauge} />}
-        {!loading && page === "issues" && <Placeholder title="Risk Center" subtitle="Issues, decision log, owner, scadenze e impatto COD." icon={AlertTriangle} />}
+        {!loading && page === "portfolio" && <PortfolioHome projects={projects} issues={issues} source={source} onReload={reload} onOpenProject={openProject} />}
+        {!loading && page === "project" && <ProjectPage project={selectedProject} setPage={setPage} />}
+        {!loading && page === "wbs" && <WbsSetup selectedProject={selectedProject} />}
+        {!loading && page === "epc" && <EpcWeeklyInput selectedProject={selectedProject} />}
+        {!loading && page === "curves" && <CurvesPage curve={curve} />}
+        {!loading && page === "cod" && <Placeholder title="COD Center" subtitle="Readiness, commissioning, documentazione e DSO." icon={Gauge} />}
+        {!loading && page === "issues" && <Placeholder title="Risk Center" subtitle="Issues, owner, scadenze e impatto COD." icon={AlertTriangle} />}
         {!loading && page === "reports" && <Placeholder title="Management Reports" subtitle="Report settimanale per direzione e management." icon={FileSpreadsheet} />}
       </main>
     </div>

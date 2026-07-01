@@ -497,3 +497,32 @@ th {
   background: rgba(46,204,113,.16);
   border: 1px solid rgba(46,204,113,.45);
 }
+
+
+.project-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.project-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.project-tabs button {
+  border: 1px solid #2a4366;
+  background: rgba(255,255,255,.04);
+  color: #edf5ff;
+  padding: 10px 13px;
+  border-radius: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.project-tabs button:hover {
+  border-color: rgba(85,215,255,.45);
+  background: rgba(85,215,255,.08);
+}
